@@ -1,39 +1,62 @@
+
+#BB
+#8/5/25
+#This script was originally written by SS. I'm adapting it for some analyses for the Sorghum symposium happening in 2 weeks.
+
 #-----Loading Libraries and Data Sets----
 # Load necessary libraries
 library(readxl)   # For reading Excel files
 library(janitor)  # For cleaning column names
 library(dplyr)    # For using the pipe operator (%>%)
 library(corrr)    # For nicer correlation matrices
-
-# Read and clean the data
-dmgr <- read_xlsx("C:/Users/sms689/Downloads/MAC 2022 Mother (16).xlsx", sheet = "DMGR Data")
-
-amf <- read_xlsx("C:/Users/sms689/Downloads/MAC 2022 Mother (16).xlsx", sheet = "AMF Score")
-mac <- read_xlsx("C:/Users/sms689/Downloads/MAC 2022 Mother (16).xlsx", sheet = "MAC22 Weights")
-emh <- read_xlsx("C:/Users/sms689/Downloads/MAC 2022 Mother (16).xlsx", sheet = "EMH")
-nuts <- read_xlsx("C:/Users/sms689/Downloads/MAC 2022 Mother (16).xlsx", sheet = "MAC22 Nutrients")
-Origins <- read_xlsx("C:/Users/sms689/Downloads/MAC 2022 Mother (16).xlsx", sheet = "Geno Origins")
-
-g2c <- read_xlsx("C:/Users/sms689/Downloads/G2C All Data (7).xlsx", sheet = "Weights")
-g2camf <- read_xlsx("C:/Users/sms689/Downloads/G2C All Data (7).xlsx", sheet = "AMF Score")
-
-dsLegacy <- read_xlsx("C:/Users/sms689/Downloads/Legacy Study 2024.xlsx", sheet = "LP2")
-
-dsdrought<- read_xlsx("C:/Users/sms689/Downloads/z6-19231(z6-19231)-1736291922.xlsx", sheet = "Config 1")
-dswet<- read_xlsx("C:/Users/sms689/Downloads/z6-19230(z6-19230)-1736199516.xlsx", sheet = "Config 1")
-
-
-# Load unnecessary libraries
 library(tidyr)
 library(ggplot2)
 library(EnvStats)
 library(lubridate)
+library(stringr)
 library(gridExtra)
 
-#-----------Combining Data----
 
-mac$Rep <- gsub("[^A-Za-z]", "", mac$`Sample ID`)  # Remove everything that's not a letter
-mac$Position <- gsub("[^0-9]", "", mac$`Sample ID`)  # Remove everything that's not a digit
+#Set up working directory
+getwd()
+
+#This is my path - change yours to whatever yours is
+setwd("C:/Users/beabo/OneDrive/Documents/NAU/Sorghum/MAC-2022-Drought")
+
+
+# Read and clean the data
+dmgr <- read_xlsx("data/MAC 2022 Mother for R.xlsx", sheet = "DMGR Data")%>%
+clean_names()
+amf <- read_xlsx("data/MAC 2022 Mother for R.xlsx", sheet = "AMF Score")%>%
+  clean_names()
+mac <- read_xlsx("data/MAC 2022 Mother for R.xlsx", sheet = "MAC22 Weights")%>%
+  clean_names()%>%
+  filter(genotype != "No Tag")%>%
+  mutate(rep = str_extract(sample_id, "[A-Za-z]"),
+        position = str_extract(sample_id, "[0-9]+"))  # Remove everything that's not a digit
+emh <- read_xlsx("data/MAC 2022 Mother for R.xlsx", sheet = "EMH")%>%
+  clean_names()
+nuts <- read_xlsx("data/MAC 2022 Mother for R.xlsx", sheet = "MAC22 Nutrients")%>%
+  clean_names()
+Origins <- read_xlsx("data/MAC 2022 Mother for R.xlsx", sheet = "Geno Origins")%>%
+  clean_names()
+
+#What is G2C, and should I include it?
+#g2c <- read_xlsx("data/G2C All Data (7).xlsx", sheet = "Weights")%>%
+ # clean_names()
+#g2camf <- read_xlsx("data/G2C All Data (7).xlsx", sheet = "AMF Score")%>%
+#  clean_names()
+
+#Same question for legacy study
+#dsLegacy <- read_xlsx("C:/Users/sms689/Downloads/Legacy Study 2024.xlsx", sheet = "LP2")
+
+#What are dsdrought and dswet?
+#dsdrought<- read_xlsx("C:/Users/sms689/Downloads/z6-19231(z6-19231)-1736291922.xlsx", sheet = "Config 1")
+#dswet<- read_xlsx("C:/Users/sms689/Downloads/z6-19230(z6-19230)-1736199516.xlsx", sheet = "Config 1")
+
+
+
+#-----------Combining Data----
 
 nuts$Rep <- gsub("[^A-Za-z]", "", nuts$`Sample ID`)  # Remove everything that's not a letter
 nuts$Position <- gsub("[^0-9]", "", nuts$`Sample ID`)  # Remove everything that's not a digit

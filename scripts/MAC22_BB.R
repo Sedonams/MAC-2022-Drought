@@ -15,6 +15,7 @@ library(EnvStats)
 library(lubridate)
 library(stringr)
 library(gridExtra)
+library(forcats)
 
 
 #Set up working directory
@@ -23,181 +24,52 @@ getwd()
 #This is my path - change yours to whatever yours is
 setwd("C:/Users/beabo/OneDrive/Documents/NAU/Sorghum/MAC-2022-Drought")
 
+ds <- read.csv("data/MAC22_cleaned.csv") #Using the cleaned up dataset. Missing some things like dmgr. 
 
-# Read and clean the data
-
-#Where is sample ID in dmgr?
-dmgr <- read_xlsx("data/MAC 2022 Mother for R.xlsx", sheet = "DMGR Data")%>%
-  clean_names()%>%
-  rename(treatment = treat)
-
-amf <- read_xlsx("data/MAC 2022 Mother for R.xlsx", sheet = "AMF Score")%>%
-  clean_names()%>%
-  rename(treatment = treat)%>%
-  mutate(genotype = stringr::str_replace(as.character(genotype), "\\.0$", ""),
-  position = as.integer(position))
-
-mac <- read_xlsx("data/MAC 2022 Mother for R.xlsx", sheet = "MAC22 Weights")%>%
-  clean_names()%>%
-  rename(treatment = treat)%>%
-  filter(genotype != "No Tag")%>%
-  mutate(rep = stringr::str_extract(sample_id, "[A-Za-z]"),
-        position = stringr::str_extract(sample_id, "[0-9]+"),
-        genotype = stringr::str_replace(as.character(genotype), "\\.0$", ""),
-        position = as.integer(position))
-
-emh <- read_xlsx("data/MAC 2022 Mother for R.xlsx", sheet = "EMH")%>%
-  clean_names()%>%
-  rename(sample_id = sample)%>%
-  mutate(genotype = stringr::str_replace(as.character(genotype), "\\.0$", ""),
-         position = as.integer(position))
-
-nuts <- read_xlsx("data/MAC 2022 Mother for R.xlsx", sheet = "MAC22 Nutrients")%>%
-  clean_names()%>%
-  mutate(rep = stringr::str_extract(sample_id, "[A-Za-z]"),
-        position = stringr::str_extract(sample_id, "[0-9]+"),
-        genotype = stringr::str_replace(as.character(genotype), "\\.0$", ""),
-        position = as.integer(position))
-
-origins <- read_xlsx("data/MAC 2022 Mother for R.xlsx", sheet = "Geno Origins")%>%
-  clean_names()
-
-#What is G2C, and should I include it?
-#g2c <- read_xlsx("data/G2C All Data (7).xlsx", sheet = "Weights")%>%
- # clean_names()
-#g2camf <- read_xlsx("data/G2C All Data (7).xlsx", sheet = "AMF Score")%>%
-#  clean_names()
-
-#Same question for legacy study
-#dsLegacy <- read_xlsx("C:/Users/sms689/Downloads/Legacy Study 2024.xlsx", sheet = "LP2")
-
-#What are dsdrought and dswet?
-#dsdrought<- read_xlsx("C:/Users/sms689/Downloads/z6-19231(z6-19231)-1736291922.xlsx", sheet = "Config 1")
-#dswet<- read_xlsx("C:/Users/sms689/Downloads/z6-19230(z6-19230)-1736199516.xlsx", sheet = "Config 1")
-
-
-
-#-----------Combining Data----
-
-ds <- mac %>%
-  left_join(amf, by = c("genotype", "treatment", "rep","position", "sample_id")) %>%
-  left_join(emh, by = c("genotype", "treatment", "rep","position", "sample_id")) %>%
-  left_join(nuts,by = c("genotype", "treatment", "rep","position", "sample_id"))%>%
-  mutate(across(c(florets, shoot_wt, main_shoot_wtkg, amf_in_dry_soil), as.numeric))
-
-#what about dmgr? leaving out for now - does not have sample ID
-
-
-g2c$Rep <- as.integer(g2c$Rep)
-g2c$Genotype <- gsub("\\.0$", "", as.character(g2c$Genotype))
-g2camf$Genotype <- gsub("\\.0$", "", as.character(g2camf$Genotype))
-
-g2combo <- g2c %>%  
-  left_join(g2camf, by = c("Genotype", "Treat", "Rep"))
+theme_set(theme_bw())
 
 #------macombo plots----
 
-# Filter out 0 values and NA values
-#subset the data in macombo into just the genotypes scored for emh
-macombosubset <- macombo %>%
-  filter(!is.na(TOT) & 
-           TOT != 0 & 
-           TOT != "#DIV/0!")
-
-# Fit linear models for each treatment
-model_watered <- lm(AMFInDrySoil ~ RLC_P, data = macombosubset %>% filter(Treat == "Watered"))
-model_droughted <- lm(AMFInDrySoil ~ RLC_P, data = macombosubset %>% filter(Treat == "Droughted"))
-
-# Extract slope and R-squared values
-slope_watered <- coef(model_watered)[2]  # Slope for "Watered"
-r2_watered <- summary(model_watered)$r.squared  # R-squared for "Watered"
-
-slope_droughted <- coef(model_droughted)[2]  # Slope for "Droughted"
-r2_droughted <- summary(model_droughted)$r.squared  # R-squared for "Droughted"
 
 
-
-
-
-ds <- macombo %>%
-  group_by(Genotype) %>%
-  mutate(rr = if_else(Treat == "Droughted", 
-                      log(ShootWt / mean(ShootWt[Treat == "Watered"], na.rm = TRUE)), 
+rrs <- ds %>%
+  group_by(genotype) %>%
+  mutate(rr = if_else(treatment == "Droughted", 
+                      log(shoot_wt / mean(shoot_wt[treatment == "Watered"], na.rm = TRUE)), 
                       NA_real_))
 
+#rrs %>%
+ # group_by(genotype) %>%
+  #mutate(mean_rr = mean(rr, na.rm = TRUE)) %>%  # Calculate mean rr for each Genotype
+  #ungroup() %>%
+  #arrange(desc(mean_rr)) %>%
+  #ggplot(aes(x = fct_reorder(factor(genotype), rr, .fun = mean, .desc = TRUE), 
+  #           y = rr, 
+  #           fill = genotype)) +
+  #geom_boxplot() +
+  #stat_n_text()+
+  #theme(axis.text.x = element_text(angle = 90))+
+  #geom_hline(yintercept = 0) +
+  #labs(title  = "Shoot Weight Response Ratio by Genotype", x = "Genotype", y = "Shoot Weight Response Ratio")+
+  #theme(legend.position = "none")
+
+
+
+
+
+
+# Create the AMF boxplot
 ds %>%
-  group_by(Genotype) %>%
-  mutate(mean_rr = mean(rr, na.rm = TRUE)) %>%  # Calculate mean rr for each Genotype
-  ungroup() %>%
-  arrange(desc(mean_rr)) %>%
-  ggplot(aes(x = fct_reorder(factor(Genotype), rr, .fun = mean, .desc = TRUE), 
-             y = rr, 
-             fill = Genotype)) +
+  pivot_longer(cols = c(amf_in_dry_soil, dse_in_dry_soil), names_to = "fungus_type", values_to = "fungal_amt_in_dry_soil") %>%
+  filter(!is.na(fungal_amt_in_dry_soil)) %>%
+  ggplot(aes(x = genotype, y = fungal_amt_in_dry_soil, fill = treatment)) +
   geom_boxplot() +
   stat_n_text()+
-  theme(axis.text.x = element_text(angle = 90))+
-  geom_hline(yintercept = 0) +
-  labs(title  = "Shoot Weight Response Ratio by Genotype", x = "Genotype", y = "Shoot Weight Response Ratio")+
-  theme(legend.position = "none")
-
-# Plot with faceting by NumOfPlants from the dmgr dataset
-ggplot(data = ds,
-       aes(x = Genotype, y = mgr)) +
-  geom_boxplot(aes(fill = Genotype)) +  # Color boxplot
-  theme(axis.title.x = element_blank()) +  # Remove X title
-  facet_grid(~NumOfPlants)+ # Facet by NumOfPlants from the dmgr dataset
-  stat_n_text() 
+  labs(y = "Fungus in Dry Soil (m/g)")+
+  facet_grid(fungus_type~.)
 
 
-
-
-# Plot
-macombosubset %>%
-  ggplot(aes(x = RLC_P, y = AMFInDrySoil, fill = Genotype, color = Treat)) +
-  geom_jitter(width = 0.2, height = 0.2, size = 3, shape = 21, alpha = 0.7) +
-  geom_smooth(method = "lm", se = FALSE) +
-  theme_minimal() +
-  scale_shape_manual(values = c("Watered" = 16, "Droughted" = 17)) +
-  scale_color_manual(values = c("Watered" = "lightblue", "Droughted" = "darkred")) +
-  geom_text(
-    aes(x = 0.1, y = max(AMFInDrySoil) * 0.8, label = paste("Watered: Slope =", round(slope_watered, 2),
-                                                            "\nR² =", round(r2_watered, 2))),
-    color = "lightblue", hjust = 0, size = 3
-  ) +
-  geom_text(
-    aes(x = 0.1, y = max(AMFInDrySoil) * 0.9, label = paste("Droughted: Slope =", round(slope_droughted, 2),
-                                                            "\nR² =", round(r2_droughted, 2))),
-    color = "darkred", hjust = 0, size = 3
-  )
-
-
-
-
-
-
-
-# Create the AMF boxplot# Create the AMF boxplotGenotype
-macombosubset %>%
-  ggplot(aes(x = Genotype, y = AMFInDrySoil, fill = Treat)) +
-  geom_boxplot() +
-  stat_n_text()+
-  labs(y = "AMF in Dry Soil (m/g)")
-
-# Create the DSE boxplot
-macombosubset %>%
-  ggplot(aes(x = Genotype, y = DSEInDrySoil, fill = Treat)) +
-  geom_boxplot() +
-  stat_n_text()+
-  labs(y = "DSE in Dry Soil (m/g)")
-
-#violin of Treat
-macombosubset %>%
-  ggplot(aes(x = Treat, y = AMFInDrySoil, fill = Treat)) +
-  geom_violin(trim = FALSE, alpha = 0.6) +  # Violin plot with transparency
-  geom_boxplot(width = 0.2, color = "black", alpha = 0.3, outlier.shape = NA) +  # Boxplot with some transparency
-  stat_n_text()+  # Adds count labels on violin plots
-  theme(axis.title.x = element_blank())
-
+#Stopped here for now.
 
 
 #------correlations with Origins data-----

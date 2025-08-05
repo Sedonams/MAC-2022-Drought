@@ -18,7 +18,7 @@ This repository contains scripts and data for the Sorghum MAC-2022 drought exper
 
 ### Main Scripts
 
-- `MAC22_BB.R`: Main cleanup script. Use this to generate a uniform dataset (located in `/data` but feel free to run again).
+- `MAC22_data_prep.R`: Main cleanup script. Use this to generate a uniform dataset (located in `/data` but feel free to run again).
 - Other scripts in the folder provide additional analyses and visualizations.
 
 ### Data

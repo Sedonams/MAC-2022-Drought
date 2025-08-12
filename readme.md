@@ -6,7 +6,7 @@ This repository contains scripts and data for the Sorghum MAC-2022 drought exper
 
 ### Project Structure
 
-- `data/` — Raw and cleaned datasets (Excel files)
+- `data/` — Raw and cleaned datasets (Excel and csv files)
 - `scripts/` — R scripts for data cleaning, analysis, and visualization
 
 ### Getting Started

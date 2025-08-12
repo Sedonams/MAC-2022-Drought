@@ -75,7 +75,7 @@ origins <- read_xlsx("data/MAC 2022 Mother for R.xlsx", sheet = "Geno Origins")%
 #Same question for legacy study
 #dsLegacy <- read_xlsx("C:/Users/sms689/Downloads/Legacy Study 2024.xlsx", sheet = "LP2")
 
-#What are dsdrought and dswet?
+#What are dsdrought and dswet? Drought probes data. Include but as separate datasets.
 #dsdrought<- read_xlsx("C:/Users/sms689/Downloads/z6-19231(z6-19231)-1736291922.xlsx", sheet = "Config 1")
 #dswet<- read_xlsx("C:/Users/sms689/Downloads/z6-19230(z6-19230)-1736199516.xlsx", sheet = "Config 1")
 
@@ -89,18 +89,10 @@ ds <- mac %>%
   left_join(nuts,by = c("genotype", "treatment", "rep","position", "sample_id"))%>%
   mutate(across(c(florets, shoot_wt, main_shoot_wtkg, amf_in_dry_soil), as.numeric))
 
-#what about dmgr? leaving out for now - does not have sample ID
-
 sapply(ds, class)
 
-#Skipping g2c again for now bc I don't know what it is
-#g2c$Rep <- as.integer(g2c$Rep)
-#g2c$Genotype <- gsub("\\.0$", "", as.character(g2c$Genotype))
-#g2camf$Genotype <- gsub("\\.0$", "", as.character(g2camf$Genotype))
 
-#g2combo <- g2c %>%  
- # left_join(g2camf, by = c("Genotype", "Treat", "Rep"))
-
+View(ds)
 
 write.csv(ds, "data/MAC22_cleaned.csv", row.names = FALSE)
 

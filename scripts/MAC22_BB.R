@@ -31,7 +31,384 @@ theme_set(theme_bw())
 
 #------macombo plots----
 
+vars <- c("shoot_wt", "florets","arb","vesicle_or_spore", "amf_in_dry_soil" , "rlc_p","dse_in_dry_soil", "d13c", "c", "d15n", "n", "p", "cn_ratio", "np_ratio")
 
+
+ds_scaled <- ds %>%
+  group_by(genotype) %>%
+  mutate(across(all_of(vars), ~ scale(.)[,1])) %>%
+  ungroup()
+
+# Step 2: Safe t-tests for each genotype × variable
+stats_df <- ds_scaled %>%
+  select(genotype, treatment, all_of(vars)) %>%
+  pivot_longer(cols = all_of(vars), names_to = "variable", values_to = "value") %>%
+  group_by(genotype, variable) %>%
+  summarise(
+    p_value = tryCatch({
+      if (n_distinct(treatment) == 2) {
+        t.test(value ~ treatment)$p.value
+      } else {
+        NA_real_
+      }
+    }, error = function(e) NA_real_),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    stars = case_when(
+      !is.na(p_value) & p_value <= 0.001 ~ "***",
+      !is.na(p_value) & p_value <= 0.01  ~ "**",
+      !is.na(p_value) & p_value <= 0.05  ~ "*",
+      TRUE ~ ""
+    )
+  )
+
+# Step 3: Calculate drought effect (for coloring)
+heatmap_df <- ds_scaled %>%
+  select(genotype, treatment, all_of(vars)) %>%
+  pivot_longer(cols = all_of(vars), names_to = "variable", values_to = "value") %>%
+  group_by(genotype, treatment, variable) %>%
+  summarise(mean_val = mean(value, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = treatment, values_from = mean_val) %>%
+  mutate(effect = Droughted - Watered)
+
+# Step 4: Order variables from most red to most blue
+var_order <- heatmap_df %>%
+  group_by(variable) %>%
+  summarise(mean_effect = mean(effect, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(mean_effect)) %>%
+  pull(variable)
+
+heatmap_df <- heatmap_df %>%
+  mutate(variable = factor(variable, levels = var_order))
+
+# Step 5: Merge stats into heatmap data
+heatmap_df <- left_join(heatmap_df, stats_df, by = c("genotype", "variable"))
+
+# Step 6: Plot heatmap with stars
+ggplot(heatmap_df, aes(x = variable, y = genotype, fill = effect)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = stars), color = "black", size = 4) +
+  scale_fill_gradient2(
+    low = "blue", mid = "white", high = "red", midpoint = 0,
+    name = "Std. diff\n(Drought - Watered)"
+  ) +
+  scale_x_discrete(position = "top") +
+  labs(
+    x = "Variable",
+    y = "Genotype",
+    title = "Drought effects by genotype (standardized)"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 0),
+    plot.title = element_text(hjust = 0.5)
+  )
+
+
+
+
+
+
+
+
+
+
+# Function to perform t-test and calculate effect size for each genotype-trait combination
+calculate_drought_effects <- function(data, traits) {
+  
+  results_list <- list()
+  
+  for(trait in traits) {
+    if(!trait %in% colnames(data) || trait == "") {
+      next
+    }
+    
+    trait_results <- data %>%
+      filter(!is.na(.data[[trait]]) & !is.na(treatment) & !is.na(genotype)) %>%
+      filter(treatment %in% c("Watered", "Droughted")) %>%
+      group_by(genotype) %>%
+      filter(n() >= 4) %>%  # Need at least 4 observations (2 per treatment)
+      reframe(  # Changed from summarise to reframe
+        trait = trait,
+        n_watered = sum(treatment == "Watered"),
+        n_droughted = sum(treatment == "Droughted"),
+        mean_watered = mean(.data[[trait]][treatment == "Watered"], na.rm = TRUE),
+        mean_droughted = mean(.data[[trait]][treatment == "Droughted"], na.rm = TRUE),
+        sd_watered = sd(.data[[trait]][treatment == "Watered"], na.rm = TRUE),
+        sd_droughted = sd(.data[[trait]][treatment == "Droughted"], na.rm = TRUE),
+        # Effect size (Cohen's d)
+        cohens_d = {
+          pooled_sd <- sqrt(((n_watered - 1) * sd_watered^2 + (n_droughted - 1) * sd_droughted^2) / 
+                              (n_watered + n_droughted - 2))
+          if(pooled_sd > 0) {
+            (mean_droughted - mean_watered) / pooled_sd
+          } else {
+            0
+          }
+        },
+        # T-test - simplified approach
+        p_value = {
+          if(n_watered >= 2 & n_droughted >= 2) {
+            tryCatch({
+              watered_vals <- .data[[trait]][treatment == "Watered"]
+              droughted_vals <- .data[[trait]][treatment == "Droughted"]
+              test_result <- t.test(droughted_vals, watered_vals)
+              test_result$p.value
+            }, error = function(e) {
+              1.0
+            })
+          } else {
+            1.0
+          }
+        },
+        t_stat = {
+          if(n_watered >= 2 & n_droughted >= 2) {
+            tryCatch({
+              watered_vals <- .data[[trait]][treatment == "Watered"]
+              droughted_vals <- .data[[trait]][treatment == "Droughted"]
+              test_result <- t.test(droughted_vals, watered_vals)
+              as.numeric(test_result$statistic)
+            }, error = function(e) {
+              0
+            })
+          } else {
+            0
+          }
+        }
+      ) %>%
+      mutate(
+        # Significance categories
+        significance = case_when(
+          p_value <= 0.001 ~ "***",
+          p_value <= 0.01 ~ "**",
+          p_value <= 0.05 ~ "*",
+          TRUE ~ "ns"
+        ),
+        # CORRECTED: Trait-specific effect scoring for drought tolerance
+        drought_tolerance_score = case_when(
+          p_value > 0.05 ~ 0,  # Non-significant = neutral
+          # For traits where higher values under drought = better tolerance
+          trait %in% names(trait_interpretations)[sapply(trait_interpretations, isTRUE)] & 
+            cohens_d > 0 ~ pmin(abs(cohens_d) * (-log10(p_value)), 10),  # Positive score
+          # For traits where lower values under drought = better tolerance  
+          trait %in% names(trait_interpretations)[sapply(trait_interpretations, isFALSE)] & 
+            cohens_d < 0 ~ pmin(abs(cohens_d) * (-log10(p_value)), 10),  # Positive score
+          # All other cases = negative score (poor tolerance)
+          TRUE ~ -pmin(abs(cohens_d) * (-log10(p_value)), 10)
+        ),
+        # Keep original effect score for comparison
+        original_effect_score = case_when(
+          p_value > 0.05 ~ 0,
+          cohens_d > 0 ~ pmin(abs(cohens_d) * (-log10(p_value)), 10),
+          cohens_d < 0 ~ -pmin(abs(cohens_d) * (-log10(p_value)), 10),
+          TRUE ~ 0
+        ),
+        # Response ratio for interpretation
+        response_ratio = log(mean_droughted / mean_watered),
+        # Interpretation of the response
+        drought_response_interpretation = case_when(
+          p_value > 0.05 ~ "No significant effect",
+          trait %in% names(trait_interpretations)[sapply(trait_interpretations, isTRUE)] & 
+            cohens_d > 0 ~ "Drought tolerant response",
+          trait %in% names(trait_interpretations)[sapply(trait_interpretations, isFALSE)] & 
+            cohens_d < 0 ~ "Drought tolerant response",
+          TRUE ~ "Drought sensitive response"
+        )
+      )
+    
+    results_list[[trait]] <- trait_results
+  }
+  
+  # Combine all results
+  bind_rows(results_list)
+}
+
+# Calculate drought effects
+drought_effects <- calculate_drought_effects(macombo, traits)
+
+print("=== DROUGHT EFFECTS SUMMARY ===")
+print(paste("Total genotype-trait combinations:", nrow(drought_effects)))
+print(paste("Significant effects (p < 0.05):", sum(drought_effects$p_value < 0.05, na.rm = TRUE)))
+
+# Calculate overall drought tolerance for ordering (using corrected scores)
+drought_effects <- drought_effects %>%
+  group_by(Genotype) %>%
+  mutate(
+    overall_drought_tolerance = mean(drought_tolerance_score, na.rm = TRUE),
+    original_overall_tolerance = mean(original_effect_score, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+# Create trait labels for better display
+trait_labels <- c(
+  "ShootWt" = "Shoot Weight",
+  "Florets" = "Florets", 
+  "d15N" = "δ15N",
+  "d13C" = "δ13C",
+  "N" = "N",
+  "P" = "P", 
+  "RLC_P" = "RLC_P",
+  "C" = "C",
+  "CN_Ratio" = "C/N"
+)
+
+# Print trait interpretations for reference
+print("\n=== TRAIT INTERPRETATIONS FOR DROUGHT TOLERANCE ===")
+for(trait in names(trait_interpretations)) {
+  direction <- ifelse(trait_interpretations[[trait]], "Higher under drought = better", "Lower under drought = better")
+  print(paste(trait, ":", direction))
+}
+
+# Create enhanced significant effects heatmap with CORRECTED drought tolerance scoring
+significant_effects <- drought_effects %>%
+  filter(p_value < 0.05)
+
+if(nrow(significant_effects) > 0) {
+  
+  # Corrected heatmap using proper drought tolerance scores
+  sig_heatmap_corrected <- significant_effects %>%
+    mutate(trait_display = trait_labels[trait]) %>%
+    ggplot(aes(x = factor(trait_display, levels = trait_labels[traits]), 
+               y = reorder(Genotype, overall_drought_tolerance), fill = drought_tolerance_score)) +
+    geom_tile(color = "white", size = 0.3) +
+    geom_text(aes(label = significance), 
+              color = "white", size = 2.5, fontface = "bold") +
+    scale_fill_gradient2(
+      low = "#d73027",      # Red = drought sensitive
+      mid = "#f7f7f7",      # Gray = neutral
+      high = "#1a9850",     # Green = drought tolerant
+      midpoint = 0,
+      name = "Drought\nTolerance"
+    ) +
+    scale_x_discrete(position = "top", expand = c(0, 0)) +
+    scale_y_discrete(expand = c(0, 0)) +
+    labs(
+      title = "Drought Tolerance by Genotype and Trait",
+      subtitle = "Genotypes ordered by overall drought tolerance (most tolerant at top)",
+      x = NULL,
+      y = "Genotype",
+      caption = "*** p≤0.001  ** p≤0.01  * p≤0.05  |  Green=drought tolerant, Red=drought sensitive"
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.x.top = element_text(angle = 45, hjust = 0, vjust = 0, size = 9, face = "bold"),
+      axis.text.y = element_text(size = 7),
+      axis.ticks = element_blank(),
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 10, hjust = 0.5, color = "gray30"),
+      plot.caption = element_text(size = 8, hjust = 0.5, color = "gray50"),
+      legend.position = "right",
+      legend.title = element_text(size = 9, face = "bold"),
+      panel.grid = element_blank(),
+      panel.border = element_blank()
+    )
+  
+  print(sig_heatmap_corrected)
+  
+  # Comparison plot showing the difference
+  comparison_plot <- significant_effects %>%
+    select(Genotype, trait, original_effect_score, drought_tolerance_score) %>%
+    pivot_longer(cols = c(original_effect_score, drought_tolerance_score), 
+                 names_to = "score_type", values_to = "score") %>%
+    mutate(
+      score_type = case_when(
+        score_type == "original_effect_score" ~ "Original (Incorrect)",
+        score_type == "drought_tolerance_score" ~ "Corrected (Trait-Specific)"
+      ),
+      trait_display = trait_labels[trait]
+    ) %>%
+    ggplot(aes(x = factor(trait_display, levels = trait_labels[traits]), 
+               y = Genotype, fill = score)) +
+    geom_tile(color = "white", size = 0.2) +
+    facet_wrap(~score_type, ncol = 2) +
+    scale_fill_gradient2(
+      low = "#d73027", mid = "#f7f7f7", high = "#1a9850",
+      midpoint = 0, name = "Score"
+    ) +
+    scale_x_discrete(position = "top") +
+    labs(
+      title = "Comparison: Original vs Corrected Drought Tolerance Scoring",
+      subtitle = "Notice how some genotypes change ranking with trait-specific interpretation",
+      x = NULL, y = "Genotype",
+      caption = "Green = drought tolerant response, Red = drought sensitive response"
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.x.top = element_text(angle = 45, hjust = 0, vjust = 0, size = 8),
+      axis.text.y = element_text(size = 6),
+      strip.text = element_text(face = "bold"),
+      plot.title = element_text(size = 12, face = "bold"),
+      panel.grid = element_blank()
+    )
+  
+  print(comparison_plot)
+  
+} else {
+  print("No significant effects found for heatmap")
+}
+
+# CORRECTED Summary statistics
+print("\n=== CORRECTED SUMMARY BY TRAIT ===")
+summary_by_trait <- drought_effects %>%
+  group_by(trait) %>%
+  summarise(
+    n_genotypes = n(),
+    n_significant = sum(p_value < 0.05),
+    pct_significant = round(100 * n_significant / n_genotypes, 1),
+    n_drought_tolerant = sum(drought_tolerance_score > 0),
+    n_drought_sensitive = sum(drought_tolerance_score < 0),
+    mean_effect_size = round(mean(abs(cohens_d), na.rm = TRUE), 2),
+    trait_interpretation = ifelse(trait %in% names(trait_interpretations), 
+                                  ifelse(trait_interpretations[[trait]], "Higher=better", "Lower=better"), 
+                                  "Unknown"),
+    .groups = 'drop'
+  )
+
+print(summary_by_trait)
+
+print("\n=== CORRECTED SUMMARY BY GENOTYPE ===")
+summary_by_genotype <- drought_effects %>%
+  group_by(Genotype) %>%
+  summarise(
+    n_traits = n(),
+    n_significant = sum(p_value < 0.05),
+    n_drought_tolerant = sum(drought_tolerance_score > 0),
+    n_drought_sensitive = sum(drought_tolerance_score < 0),
+    overall_drought_tolerance = mean(drought_tolerance_score, na.rm = TRUE),
+    original_tolerance_score = mean(original_effect_score, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(overall_drought_tolerance))
+
+print(head(summary_by_genotype, 10))
+
+print("\n=== TOP DROUGHT TOLERANT GENOTYPES (CORRECTED) ===")
+top_drought_tolerant <- summary_by_genotype %>%
+  filter(overall_drought_tolerance > 0) %>%
+  head(5)
+print(top_drought_tolerant)
+
+print("\n=== TOP DROUGHT SENSITIVE GENOTYPES (CORRECTED) ===")
+top_drought_sensitive <- summary_by_genotype %>%
+  filter(overall_drought_tolerance < 0) %>%
+  tail(5)
+print(top_drought_sensitive)
+
+print("\n=== RANKING COMPARISON ===")
+ranking_comparison <- summary_by_genotype %>%
+  select(Genotype, overall_drought_tolerance, original_tolerance_score) %>%
+  mutate(
+    corrected_rank = rank(-overall_drought_tolerance),
+    original_rank = rank(-original_tolerance_score),
+    rank_change = original_rank - corrected_rank
+  ) %>%
+  arrange(corrected_rank) %>%
+  head(10)
+
+print(ranking_comparison)
+#
+
+#vis_miss(ds)
 
 rrs <- ds %>%
   group_by(genotype) %>%
@@ -1329,334 +1706,7 @@ top_water_dependent <- summary_by_genotype %>%
   tail(5)
 print(top_water_dependent)
 
-#-------More PCA-----
-library(dplyr)
-library(ggplot2)
-library(tidyr)
-library(broom)
 
-# Define traits to analyze (including new ones)
-traits <- c("ShootWt", "Florets", "d15N", "d13C", "N", "P", "RLC_P", "C", "CN_Ratio")
-
-# Calculate CN_Ratio if C and N columns exist
-if(exists("macombo")) {
-  if("C" %in% colnames(macombo) && "N" %in% colnames(macombo)) {
-    macombo$CN_Ratio <- macombo$C / macombo$N
-    print("Created CN_Ratio using C/N")
-  } else {
-    print("Warning: C or N columns not found - CN_Ratio cannot be calculated")
-  }
-}
-
-# Define trait-specific interpretations for drought tolerance
-# TRUE = higher values under drought indicate better tolerance
-# FALSE = lower values under drought indicate better tolerance
-trait_interpretations <- list(
-  "ShootWt" = TRUE,     # Higher shoot weight under drought = better tolerance
-  "Florets" = TRUE,     # More florets under drought = better tolerance
-  "d15N" = FALSE,       # Lower δ15N under drought = better N status = better tolerance
-  "d13C" = TRUE,        # Higher δ13C under drought = better water use efficiency = better tolerance
-  "N" = TRUE,           # Higher N under drought = better nutrient status = better tolerance
-  "P" = TRUE,           # Higher P under drought = better nutrient status = better tolerance
-  "RLC_P" = TRUE,       # Higher RLC_P under drought = better P utilization = better tolerance
-  "C" = TRUE,           # Higher C under drought = better carbon accumulation = better tolerance
-  "CN_Ratio" = FALSE    # Lower C/N under drought = better N status = better tolerance
-)
-
-# Function to perform t-test and calculate effect size for each genotype-trait combination
-calculate_drought_effects <- function(data, traits) {
-  
-  results_list <- list()
-  
-  for(trait in traits) {
-    if(!trait %in% colnames(data) || trait == "") {
-      next
-    }
-    
-    trait_results <- data %>%
-      filter(!is.na(.data[[trait]]) & !is.na(Treat) & !is.na(Genotype)) %>%
-      filter(Treat %in% c("Watered", "Droughted")) %>%
-      group_by(Genotype) %>%
-      filter(n() >= 4) %>%  # Need at least 4 observations (2 per treatment)
-      reframe(  # Changed from summarise to reframe
-        trait = trait,
-        n_watered = sum(Treat == "Watered"),
-        n_droughted = sum(Treat == "Droughted"),
-        mean_watered = mean(.data[[trait]][Treat == "Watered"], na.rm = TRUE),
-        mean_droughted = mean(.data[[trait]][Treat == "Droughted"], na.rm = TRUE),
-        sd_watered = sd(.data[[trait]][Treat == "Watered"], na.rm = TRUE),
-        sd_droughted = sd(.data[[trait]][Treat == "Droughted"], na.rm = TRUE),
-        # Effect size (Cohen's d)
-        cohens_d = {
-          pooled_sd <- sqrt(((n_watered - 1) * sd_watered^2 + (n_droughted - 1) * sd_droughted^2) / 
-                              (n_watered + n_droughted - 2))
-          if(pooled_sd > 0) {
-            (mean_droughted - mean_watered) / pooled_sd
-          } else {
-            0
-          }
-        },
-        # T-test - simplified approach
-        p_value = {
-          if(n_watered >= 2 & n_droughted >= 2) {
-            tryCatch({
-              watered_vals <- .data[[trait]][Treat == "Watered"]
-              droughted_vals <- .data[[trait]][Treat == "Droughted"]
-              test_result <- t.test(droughted_vals, watered_vals)
-              test_result$p.value
-            }, error = function(e) {
-              1.0
-            })
-          } else {
-            1.0
-          }
-        },
-        t_stat = {
-          if(n_watered >= 2 & n_droughted >= 2) {
-            tryCatch({
-              watered_vals <- .data[[trait]][Treat == "Watered"]
-              droughted_vals <- .data[[trait]][Treat == "Droughted"]
-              test_result <- t.test(droughted_vals, watered_vals)
-              as.numeric(test_result$statistic)
-            }, error = function(e) {
-              0
-            })
-          } else {
-            0
-          }
-        }
-      ) %>%
-      mutate(
-        # Significance categories
-        significance = case_when(
-          p_value <= 0.001 ~ "***",
-          p_value <= 0.01 ~ "**",
-          p_value <= 0.05 ~ "*",
-          TRUE ~ "ns"
-        ),
-        # CORRECTED: Trait-specific effect scoring for drought tolerance
-        drought_tolerance_score = case_when(
-          p_value > 0.05 ~ 0,  # Non-significant = neutral
-          # For traits where higher values under drought = better tolerance
-          trait %in% names(trait_interpretations)[sapply(trait_interpretations, isTRUE)] & 
-            cohens_d > 0 ~ pmin(abs(cohens_d) * (-log10(p_value)), 10),  # Positive score
-          # For traits where lower values under drought = better tolerance  
-          trait %in% names(trait_interpretations)[sapply(trait_interpretations, isFALSE)] & 
-            cohens_d < 0 ~ pmin(abs(cohens_d) * (-log10(p_value)), 10),  # Positive score
-          # All other cases = negative score (poor tolerance)
-          TRUE ~ -pmin(abs(cohens_d) * (-log10(p_value)), 10)
-        ),
-        # Keep original effect score for comparison
-        original_effect_score = case_when(
-          p_value > 0.05 ~ 0,
-          cohens_d > 0 ~ pmin(abs(cohens_d) * (-log10(p_value)), 10),
-          cohens_d < 0 ~ -pmin(abs(cohens_d) * (-log10(p_value)), 10),
-          TRUE ~ 0
-        ),
-        # Response ratio for interpretation
-        response_ratio = log(mean_droughted / mean_watered),
-        # Interpretation of the response
-        drought_response_interpretation = case_when(
-          p_value > 0.05 ~ "No significant effect",
-          trait %in% names(trait_interpretations)[sapply(trait_interpretations, isTRUE)] & 
-            cohens_d > 0 ~ "Drought tolerant response",
-          trait %in% names(trait_interpretations)[sapply(trait_interpretations, isFALSE)] & 
-            cohens_d < 0 ~ "Drought tolerant response",
-          TRUE ~ "Drought sensitive response"
-        )
-      )
-    
-    results_list[[trait]] <- trait_results
-  }
-  
-  # Combine all results
-  bind_rows(results_list)
-}
-
-# Calculate drought effects
-drought_effects <- calculate_drought_effects(macombo, traits)
-
-print("=== DROUGHT EFFECTS SUMMARY ===")
-print(paste("Total genotype-trait combinations:", nrow(drought_effects)))
-print(paste("Significant effects (p < 0.05):", sum(drought_effects$p_value < 0.05, na.rm = TRUE)))
-
-# Calculate overall drought tolerance for ordering (using corrected scores)
-drought_effects <- drought_effects %>%
-  group_by(Genotype) %>%
-  mutate(
-    overall_drought_tolerance = mean(drought_tolerance_score, na.rm = TRUE),
-    original_overall_tolerance = mean(original_effect_score, na.rm = TRUE)
-  ) %>%
-  ungroup()
-
-# Create trait labels for better display
-trait_labels <- c(
-  "ShootWt" = "Shoot Weight",
-  "Florets" = "Florets", 
-  "d15N" = "δ15N",
-  "d13C" = "δ13C",
-  "N" = "N",
-  "P" = "P", 
-  "RLC_P" = "RLC_P",
-  "C" = "C",
-  "CN_Ratio" = "C/N"
-)
-
-# Print trait interpretations for reference
-print("\n=== TRAIT INTERPRETATIONS FOR DROUGHT TOLERANCE ===")
-for(trait in names(trait_interpretations)) {
-  direction <- ifelse(trait_interpretations[[trait]], "Higher under drought = better", "Lower under drought = better")
-  print(paste(trait, ":", direction))
-}
-
-# Create enhanced significant effects heatmap with CORRECTED drought tolerance scoring
-significant_effects <- drought_effects %>%
-  filter(p_value < 0.05)
-
-if(nrow(significant_effects) > 0) {
-  
-  # Corrected heatmap using proper drought tolerance scores
-  sig_heatmap_corrected <- significant_effects %>%
-    mutate(trait_display = trait_labels[trait]) %>%
-    ggplot(aes(x = factor(trait_display, levels = trait_labels[traits]), 
-               y = reorder(Genotype, overall_drought_tolerance), fill = drought_tolerance_score)) +
-    geom_tile(color = "white", size = 0.3) +
-    geom_text(aes(label = significance), 
-              color = "white", size = 2.5, fontface = "bold") +
-    scale_fill_gradient2(
-      low = "#d73027",      # Red = drought sensitive
-      mid = "#f7f7f7",      # Gray = neutral
-      high = "#1a9850",     # Green = drought tolerant
-      midpoint = 0,
-      name = "Drought\nTolerance"
-    ) +
-    scale_x_discrete(position = "top", expand = c(0, 0)) +
-    scale_y_discrete(expand = c(0, 0)) +
-    labs(
-      title = "Drought Tolerance by Genotype and Trait",
-      subtitle = "Genotypes ordered by overall drought tolerance (most tolerant at top)",
-      x = NULL,
-      y = "Genotype",
-      caption = "*** p≤0.001  ** p≤0.01  * p≤0.05  |  Green=drought tolerant, Red=drought sensitive"
-    ) +
-    theme_minimal() +
-    theme(
-      axis.text.x.top = element_text(angle = 45, hjust = 0, vjust = 0, size = 9, face = "bold"),
-      axis.text.y = element_text(size = 7),
-      axis.ticks = element_blank(),
-      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-      plot.subtitle = element_text(size = 10, hjust = 0.5, color = "gray30"),
-      plot.caption = element_text(size = 8, hjust = 0.5, color = "gray50"),
-      legend.position = "right",
-      legend.title = element_text(size = 9, face = "bold"),
-      panel.grid = element_blank(),
-      panel.border = element_blank()
-    )
-  
-  print(sig_heatmap_corrected)
-  
-  # Comparison plot showing the difference
-  comparison_plot <- significant_effects %>%
-    select(Genotype, trait, original_effect_score, drought_tolerance_score) %>%
-    pivot_longer(cols = c(original_effect_score, drought_tolerance_score), 
-                 names_to = "score_type", values_to = "score") %>%
-    mutate(
-      score_type = case_when(
-        score_type == "original_effect_score" ~ "Original (Incorrect)",
-        score_type == "drought_tolerance_score" ~ "Corrected (Trait-Specific)"
-      ),
-      trait_display = trait_labels[trait]
-    ) %>%
-    ggplot(aes(x = factor(trait_display, levels = trait_labels[traits]), 
-               y = Genotype, fill = score)) +
-    geom_tile(color = "white", size = 0.2) +
-    facet_wrap(~score_type, ncol = 2) +
-    scale_fill_gradient2(
-      low = "#d73027", mid = "#f7f7f7", high = "#1a9850",
-      midpoint = 0, name = "Score"
-    ) +
-    scale_x_discrete(position = "top") +
-    labs(
-      title = "Comparison: Original vs Corrected Drought Tolerance Scoring",
-      subtitle = "Notice how some genotypes change ranking with trait-specific interpretation",
-      x = NULL, y = "Genotype",
-      caption = "Green = drought tolerant response, Red = drought sensitive response"
-    ) +
-    theme_minimal() +
-    theme(
-      axis.text.x.top = element_text(angle = 45, hjust = 0, vjust = 0, size = 8),
-      axis.text.y = element_text(size = 6),
-      strip.text = element_text(face = "bold"),
-      plot.title = element_text(size = 12, face = "bold"),
-      panel.grid = element_blank()
-    )
-  
-  print(comparison_plot)
-  
-} else {
-  print("No significant effects found for heatmap")
-}
-
-# CORRECTED Summary statistics
-print("\n=== CORRECTED SUMMARY BY TRAIT ===")
-summary_by_trait <- drought_effects %>%
-  group_by(trait) %>%
-  summarise(
-    n_genotypes = n(),
-    n_significant = sum(p_value < 0.05),
-    pct_significant = round(100 * n_significant / n_genotypes, 1),
-    n_drought_tolerant = sum(drought_tolerance_score > 0),
-    n_drought_sensitive = sum(drought_tolerance_score < 0),
-    mean_effect_size = round(mean(abs(cohens_d), na.rm = TRUE), 2),
-    trait_interpretation = ifelse(trait %in% names(trait_interpretations), 
-                                  ifelse(trait_interpretations[[trait]], "Higher=better", "Lower=better"), 
-                                  "Unknown"),
-    .groups = 'drop'
-  )
-
-print(summary_by_trait)
-
-print("\n=== CORRECTED SUMMARY BY GENOTYPE ===")
-summary_by_genotype <- drought_effects %>%
-  group_by(Genotype) %>%
-  summarise(
-    n_traits = n(),
-    n_significant = sum(p_value < 0.05),
-    n_drought_tolerant = sum(drought_tolerance_score > 0),
-    n_drought_sensitive = sum(drought_tolerance_score < 0),
-    overall_drought_tolerance = mean(drought_tolerance_score, na.rm = TRUE),
-    original_tolerance_score = mean(original_effect_score, na.rm = TRUE),
-    .groups = 'drop'
-  ) %>%
-  arrange(desc(overall_drought_tolerance))
-
-print(head(summary_by_genotype, 10))
-
-print("\n=== TOP DROUGHT TOLERANT GENOTYPES (CORRECTED) ===")
-top_drought_tolerant <- summary_by_genotype %>%
-  filter(overall_drought_tolerance > 0) %>%
-  head(5)
-print(top_drought_tolerant)
-
-print("\n=== TOP DROUGHT SENSITIVE GENOTYPES (CORRECTED) ===")
-top_drought_sensitive <- summary_by_genotype %>%
-  filter(overall_drought_tolerance < 0) %>%
-  tail(5)
-print(top_drought_sensitive)
-
-print("\n=== RANKING COMPARISON ===")
-ranking_comparison <- summary_by_genotype %>%
-  select(Genotype, overall_drought_tolerance, original_tolerance_score) %>%
-  mutate(
-    corrected_rank = rank(-overall_drought_tolerance),
-    original_rank = rank(-original_tolerance_score),
-    rank_change = original_rank - corrected_rank
-  ) %>%
-  arrange(corrected_rank) %>%
-  head(10)
-
-print(ranking_comparison)
-#
 #
 #
 #
@@ -2254,6 +2304,3 @@ ggplot(ds, aes(x = Genotype, y = ShootWt, fill = Treat)) +
   stat_n_text() +  # Assuming stat_n_text() is part of a custom package or extension
   theme_bw() +  # Use the 'black and white' theme
   theme(legend.position = "none", axis.title.x = element_blank())  # Hide legend and remove x-axis title
-
-
-

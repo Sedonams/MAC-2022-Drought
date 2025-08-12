@@ -31,8 +31,9 @@ theme_set(theme_bw())
 
 #------macombo plots----
 
-vars <- c("shoot_wt", "florets","arb","vesicle_or_spore", "amf_in_dry_soil" , "rlc_p","dse_in_dry_soil", "d13c", "c", "d15n", "n", "p", "cn_ratio", "np_ratio")
+vars_og <- c("shoot_wt", "florets","arb","vesicle_or_spore", "amf_in_dry_soil" , "rlc_p","dse_in_dry_soil", "d13c", "c", "d15n", "n", "p", "cn_ratio", "np_ratio")
 
+vars <- c("arb", "am_hyphae", "dse", "lse", "vesicle_or_spore", "amf_in_dry_soil" , "rlc_p","dse_in_dry_soil")
 
 ds_scaled <- ds %>%
   group_by(genotype) %>%
@@ -104,6 +105,8 @@ ggplot(heatmap_df, aes(x = variable, y = genotype, fill = effect)) +
     plot.title = element_text(hjust = 0.5)
   )
 
+
+#Power analysis: how many samples need to be scored
 
 
 

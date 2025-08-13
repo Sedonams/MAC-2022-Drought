@@ -87,23 +87,25 @@ heatmap_df <- heatmap_df %>%
 heatmap_df <- left_join(heatmap_df, stats_df, by = c("genotype", "variable"))
 
 # Step 6: Plot heatmap with stars
-ggplot(heatmap_df, aes(x = variable, y = genotype, fill = effect)) +
-  geom_tile(color = "white") +
-  geom_text(aes(label = stars), color = "black", size = 4) +
-  scale_fill_gradient2(
-    low = "blue", mid = "white", high = "red", midpoint = 0,
-    name = "Std. diff\n(Drought - Watered)"
-  ) +
-  scale_x_discrete(position = "top") +
-  labs(
-    x = "Variable",
-    y = "Genotype",
-    title = "Drought effects by genotype (standardized)"
-  ) +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 0),
-    plot.title = element_text(hjust = 0.5)
-  )
+print(
+  ggplot(heatmap_df, aes(x = variable, y = genotype, fill = effect)) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = stars), color = "black", size = 4) +
+    scale_fill_gradient2(
+      low = "blue", mid = "white", high = "red", midpoint = 0,
+      name = "Std. diff\n(Drought - Watered)"
+    ) +
+    scale_x_discrete(position = "top") +
+    labs(
+      x = "Variable",
+      y = "Genotype",
+      title = "Drought effects by genotype (standardized)"
+    ) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 0),
+      plot.title = element_text(hjust = 0.5)
+    )
+)
 
 
 #Power analysis: how many samples need to be scored
@@ -111,5 +113,37 @@ ggplot(heatmap_df, aes(x = variable, y = genotype, fill = effect)) +
 
 
 
+# Power analysis for mycorrhizal data
+library(pwr)
+
+# Identify relevant mycorrhizal variables (replace with actual variable names)
+mycorrhizal_vars <- c("amf_in_dry_soil", "rlc_p", "dse_in_dry_soil") #Example - replace with your actual variables
+
+# Create a data frame to store results
+results_df <- data.frame(Variable = character(), n = numeric(), stringsAsFactors = FALSE)
+
+# Perform power analysis (example using t-test; adjust for ANOVA if needed)
+for (var in mycorrhizal_vars) {
+  # Assuming two treatment groups (adjust if more)
+  power_result <- pwr.t.test(
+    d = 0.5, # Effect size (Cohen's d) - adjust based on prior knowledge or pilot data
+    sig.level = 0.05,
+    power = 0.8, # Desired power (80% is common)
+    alternative = "two.sided"
+  )
+  results_df <- rbind(results_df, data.frame(Variable = var, n = power_result$n))
+}
+
+# Write results to CSV
+tryCatch({
+  write.csv(results_df, "power_analysis_results.csv", row.names = FALSE)
+  cat("Power analysis results written to power_analysis_results.csv\n")
+}, error = function(e) {
+  cat(paste0("Error writing CSV: ", e$message), "\n")
+})
+
+# Interpretation:
+# n: The required sample size per group to achieve the specified power.
+# If n is larger than your current sample size, you need to collect more samples.
 
 

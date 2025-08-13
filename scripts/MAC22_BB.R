@@ -116,34 +116,83 @@ print(
 # Power analysis for mycorrhizal data
 library(pwr)
 
-# Identify relevant mycorrhizal variables (replace with actual variable names)
-mycorrhizal_vars <- c("amf_in_dry_soil", "rlc_p", "dse_in_dry_soil") #Example - replace with your actual variables
+mycorrhizal_vars <- c(
+  "amf_in_dry_soil", "rlc_p", "dse_in_dry_soil", "amf_tot", "dse_tot", "spores",
+  "dse_hyphae", "fine_amf", "coarse_amf", "ves_and_arb", "dse_and_am",
+  "vesicle_or_spore", "dse", "lse", "am_hyphae", "no_fungus", "arb","olpidium", "tot"
+)
 
-# Create a data frame to store results
-results_df <- data.frame(Variable = character(), n = numeric(), stringsAsFactors = FALSE)
+n_treatment <- length(unique(ds$treatment))
+n_genotype <- length(unique(ds$genotype))
+k_groups <- n_treatment * n_genotype
 
-# Perform power analysis (example using t-test; adjust for ANOVA if needed)
-for (var in mycorrhizal_vars) {
-  # Assuming two treatment groups (adjust if more)
-  power_result <- pwr.t.test(
-    d = 0.5, # Effect size (Cohen's d) - adjust based on prior knowledge or pilot data
-    sig.level = 0.05,
-    power = 0.8, # Desired power (80% is common)
-    alternative = "two.sided"
+alpha <- 0.05
+power <- 0.8
+
+results_df <- data.frame(
+  Variable = mycorrhizal_vars,
+  f = NA_real_,
+  n_per_group = NA_real_
+)
+
+for (i in seq_along(mycorrhizal_vars)) {
+  var_name <- mycorrhizal_vars[i]
+  cat("\nProcessing:", var_name, "\n")
+  
+  tmp <- ds[, c(var_name, "treatment", "genotype")]
+  tmp <- tmp[complete.cases(tmp), ]
+  
+  tmp$group <- interaction(tmp$treatment, tmp$genotype)
+  
+  # Drop sparse groups
+  group_counts <- table(tmp$group)
+  cat("Group counts:", paste(names(group_counts), group_counts, collapse=", "), "\n")
+  keep_groups <- names(group_counts[group_counts >= 2])
+  tmp <- tmp[tmp$group %in% keep_groups, ]
+  
+  if (nrow(tmp) < 4 || length(unique(tmp$group)) < 2) {
+    cat("Skipped: too few data after dropping sparse groups.\n")
+    next
+  }
+  
+  aov_model <- aov(tmp[[var_name]] ~ group, data = tmp)
+  anova_tab <- anova(aov_model)
+  
+  if (!"group" %in% rownames(anova_tab)) {
+    cat("Skipped: 'group' not in ANOVA table.\n")
+    next
+  }
+  
+  ss_effect <- anova_tab["group", "Sum Sq"]
+  ss_resid  <- anova_tab["Residuals", "Sum Sq"]
+  eta_sq <- ss_effect / (ss_effect + ss_resid)
+  
+  if (is.na(eta_sq) || eta_sq <= 0 || eta_sq >= 1) {
+    cat("Skipped: invalid eta_sq.\n")
+    next
+  }
+  
+  f_val <- sqrt(eta_sq / (1 - eta_sq))
+  k_val <- length(unique(tmp$group))
+  
+  pwr_result <- tryCatch(
+    pwr.anova.test(
+      k = k_val,
+      f = f_val,
+      sig.level = alpha,
+      power = power
+    ),
+    error = function(e) {
+      cat("Power calculation failed:", e$message, "\n")
+      NULL
+    }
   )
-  results_df <- rbind(results_df, data.frame(Variable = var, n = power_result$n))
+  
+  if (!is.null(pwr_result)) {
+    results_df$f[i] <- f_val
+    results_df$n_per_group[i] <- ceiling(pwr_result$n)
+  }
 }
 
-# Write results to CSV
-tryCatch({
-  write.csv(results_df, "power_analysis_results.csv", row.names = FALSE)
-  cat("Power analysis results written to power_analysis_results.csv\n")
-}, error = function(e) {
-  cat(paste0("Error writing CSV: ", e$message), "\n")
-})
-
-# Interpretation:
-# n: The required sample size per group to achieve the specified power.
-# If n is larger than your current sample size, you need to collect more samples.
-
-
+write.csv(results_df, "power_analysis_mycorrhizal.csv", row.names = FALSE)
+cat("Power analysis results written to power_analysis_mycorrhizal.csv\n")

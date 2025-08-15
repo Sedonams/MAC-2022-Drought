@@ -3,6 +3,7 @@
 #8/5/25
 #This script was originally written by SS. I'm adapting it for some analyses for the Sorghum symposium happening in 2 weeks.
 #Doing some visualizations.
+#editing Bea's charts
 
 #-----Loading Libraries and Data Sets----
 # Load necessary libraries
@@ -20,6 +21,7 @@ library(forcats)
 library(ggfortify)  # For autoplot
 library(scales)
 library(viridis)
+library(ggrepel)  # For smart label positioning
 
 
 #Set up working directory
@@ -464,16 +466,10 @@ write.csv(results_df, "power_analysis_mycorrhizal.csv", row.names = FALSE)
 cat("Power analysis results written to power_analysis_mycorrhizal.csv\n")
 
 
-#---PCA----
-
-# Define all variables for PCA
-all_vars <- c(
-  "amf_rlc", "am_hyphae_dse_and_am_rlc", "arb_ves_and_arb_rlc", "dse_dse_and_am_rlc",
-  "vesicle_or_spore_ves_and_arb_rlc", "lse_rlc", "coil_rlc",
-  "olpidium_rlc", "mold_rlc", "plasmodiophorids_rlc", "dot_line_rlc", "non_am_rlc",
-  "fine_endo_rlc", "amf_in_dry_soil", "dse_in_dry_soil", "shoot_wt", "florets", "d13c",
-  "c", "d15n", "n", "p", "cn_ratio", "np_ratio"
-)
+#---Ordination (PCA) for plant traits and leaf nutrients----
+# Define all variables for Ordination, plant traits and leaf nutrients
+all_vars <- c("shoot_wt", "florets", "d13c",
+  "c", "d15n", "n", "p")
 
 # Prepare data for PCA
 pca_data <- ds %>%
@@ -494,11 +490,21 @@ vars_to_keep <- pca_data %>%
 print(paste("Keeping", length(vars_to_keep), "variables for PCA"))
 print(paste("Variables kept:", paste(vars_to_keep, collapse = ", ")))
 
-# Final data preparation
-pca_data_final <- pca_data %>%
-  select(sample_id, genotype, treatment, all_of(vars_to_keep)) %>%
+# Final data preparation Just for Treatment
+#pca_data_final <- pca_data %>%
+ # select(sample_id, genotype, treatment, all_of(vars_to_keep)) %>%
   # Remove any remaining rows with all NA values
+ # filter(!if_all(all_of(vars_to_keep), is.na))
+
+
+# Final data preparation with Genotype X Treatment
+pca_data_final <- pca_data %>%
+  select(genotype, treatment, all_of(vars_to_keep)) %>%
+  group_by(genotype, treatment) %>%
+  summarise(across(all_of(vars_to_keep), ~ mean(., na.rm = TRUE)), .groups = "drop") %>%
+  mutate(sample_id = paste(genotype, treatment, sep = "_")) %>%
   filter(!if_all(all_of(vars_to_keep), is.na))
+
 
 # Perform PCA (handling missing values)
 pca_matrix <- pca_data_final %>%
@@ -568,7 +574,7 @@ loadings_df <- data.frame(
 
 # Create prettier variable names for loadings
 pretty_var_names <- c(
-  "amf_rlc" = "AMF Colonization",
+  "amf_rlc" = "AMF RLC",
   "am_hyphae_dse_and_am_rlc" = "AM Hyphae",
   "arb_ves_and_arb_rlc" = "Arbuscules",
   "dse_dse_and_am_rlc" = "DSE",
@@ -599,24 +605,71 @@ loadings_df <- loadings_df %>%
                                   pretty_var_names[Variable], 
                                   Variable))
 
-# Create the main PCA plot
-p1 <- ggplot(pca_df, aes(x = PC1, y = PC2)) +
-  # Add confidence ellipses by treatment
+# Create the main PCA plot, Selective labeling with variable arrow thickness 
+#Only label the most important loadings and use different strategies for others
+# Calculate loading strength for arrow thickness
+loadings_with_strength <- loadings_df %>% 
+  filter(abs(PC1) > 0.3 | abs(PC2) > 0.3) %>%
+  mutate(
+    # Calculate the magnitude of loading vector
+    loading_strength = sqrt(PC1^2 + PC2^2),
+    # Create thickness categories
+    thickness_category = case_when(
+      loading_strength >= 0.7 ~ "strong",      # Thickest arrows
+      loading_strength >= 0.5 ~ "medium",     # Medium arrows
+      TRUE ~ "weak"                           # Thinnest arrows
+    ),
+    # Map to actual linewidth values
+    arrow_thickness = case_when(
+      thickness_category == "strong" ~ 1.2,
+      thickness_category == "medium" ~ 0.8,
+      thickness_category == "weak" ~ 0.4
+    ),
+    # Arrow alpha based on strength
+    arrow_alpha = case_when(
+      thickness_category == "strong" ~ 0.9,
+      thickness_category == "medium" ~ 0.7,
+      thickness_category == "weak" ~ 0.5
+    )
+  )
+
+#code for the plot
+p1_selective <- ggplot(pca_df, aes(x = PC1, y = PC2)) +
   stat_ellipse(aes(color = treatment), 
                alpha = 0.3, type = "norm", level = 0.68, linewidth = 1) +
-  # Add points
-  geom_point(aes(color = treatment, shape = treatment), size = 2.5, alpha = 0.8) +
-  # Add loadings arrows (subset to avoid overcrowding)
-  geom_segment(data = loadings_df %>% 
-                 filter(abs(PC1) > 0.3 | abs(PC2) > 0.3),  # Only show strong loadings
-               aes(x = 0, y = 0, xend = PC1_scaled, yend = PC2_scaled),
+  geom_point(aes(color = treatment, shape = treatment), size = 1.5, alpha = 0.8) +
+  # Arrows with variable thickness based on loading strength
+  geom_segment(data = loadings_with_strength,
+               aes(x = 0, y = 0, xend = PC1_scaled, yend = PC2_scaled,
+                   linewidth = arrow_thickness, alpha = arrow_alpha),
                arrow = arrow(length = unit(0.2, "cm")), 
-               color = "gray30", alpha = 0.7) +
-  # Add loading labels
-  geom_text(data = loadings_df %>% 
-              filter(abs(PC1) > 0.3 | abs(PC2) > 0.3),
-            aes(x = PC1_scaled * 1.1, y = PC2_scaled * 1.1, label = Variable_pretty),
-            size = 3, color = "gray20", fontface = "bold") +
+               color = "gray20") +
+  # Custom linewidth scale
+  scale_linewidth_identity() +
+  scale_alpha_identity() +
+  # Label only the strongest loadings directly
+  geom_text_repel(data = loadings_with_strength %>% 
+                    filter(loading_strength > 0.5), # Use loading_strength instead
+                  aes(x = PC1_scaled * 1.1, y = PC2_scaled * 1.1, 
+                      label = Variable_pretty),
+                  size = 3.5, 
+                  color = "black", 
+                  fontface = "bold",
+                  box.padding = 0.6,
+                  point.padding = 0.3,
+                  force = 3) +
+  # Add full labels for medium-strength loadings using ggrepel
+  geom_text_repel(data = loadings_with_strength %>% 
+                    filter(loading_strength <= 0.5 & loading_strength > 0.3),
+                  aes(x = PC1_scaled * 1.05, y = PC2_scaled * 1.05, 
+                      label = Variable_pretty), # Full labels, not abbreviated
+                  size = 2.8, 
+                  color = "gray40", 
+                  fontface = "plain",
+                  box.padding = 0.3,
+                  point.padding = 0.2,
+                  force = 1.5,
+                  max.overlaps = Inf) +
   scale_color_manual(values = c("Droughted" = "#D73027", "Watered" = "#1A9850"),
                      name = "Treatment") +
   scale_shape_manual(values = c("Droughted" = 17, "Watered" = 16),
@@ -624,8 +677,9 @@ p1 <- ggplot(pca_df, aes(x = PC1, y = PC2)) +
   labs(
     x = paste0("PC1 (", pc1_var, "% variance)"),
     y = paste0("PC2 (", pc2_var, "% variance)"),
-    title = "Principal Component Analysis",
-    subtitle = "Plant performance, chemistry, and fungal colonization traits"
+    title = "Principal Component Analysis (Treatment X Genotype)",
+    subtitle = "Plant performance and leaf chemistry",
+    caption = "Arrow thickness indicates loading strength"
   ) +
   theme_minimal() +
   theme(
@@ -637,8 +691,20 @@ p1 <- ggplot(pca_df, aes(x = PC1, y = PC2)) +
     legend.text = element_text(size = 10),
     panel.grid.minor = element_blank(),
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
-    plot.background = element_rect(fill = "white", color = NA)
+    plot.background = element_rect(fill = "white", color = NA),
+    plot.caption = element_text(size = 9, color = "gray50")
   )
+
+# creat plot
+print(p1_selective)
+
+# Print loading strength summary for reference
+cat("\nLoading strength summary:\n")
+strength_summary <- loadings_with_strength %>%
+  select(Variable_pretty, loading_strength, thickness_category) %>%
+  arrange(desc(loading_strength))
+print(strength_summary)
+
 
 # Create a scree plot
 scree_data <- data.frame(
@@ -668,9 +734,8 @@ p2 <- ggplot(scree_data, aes(x = PC, y = Variance)) +
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8)
   )
 
-# Print both plots
-print(p1)
 print(p2)
+
 
 # Print summary statistics
 cat("\n=== PCA SUMMARY ===\n")
@@ -682,5 +747,401 @@ cat(paste("PC3 variance explained:", pc3_var, "%\n"))
 cat(paste("Cumulative variance (PC1+PC2):", round(pc1_var + pc2_var, 1), "%\n"))
 
 # Optional: Save plots
-ggsave("pca_biplot.png", plot = p1, width = 12, height = 8, dpi = 300, bg = "white")
+ggsave("pca_biplot.png", plot = p1_selective, width = 12, height = 8, dpi = 300, bg = "white")
 ggsave("pca_scree.png", plot = p2, width = 8, height = 6, dpi = 300, bg = "white")
+
+#
+#
+#
+#
+#
+
+
+
+
+#---Ordination (PCA) for colonization (as well as plant traits and leaf nutrients)----
+# Colonization vars, plant traits, and leaf nutrients
+all_vars <- c(
+  "amf_rlc", "am_hyphae_dse_and_am_rlc", "arb_ves_and_arb_rlc", "dse_dse_and_am_rlc",
+  "vesicle_or_spore_ves_and_arb_rlc", "lse_rlc", "coil_rlc",
+  "olpidium_rlc", "mold_rlc", "plasmodiophorids_rlc", "dot_line_rlc", "non_am_rlc",
+  "fine_endo_rlc", "amf_in_dry_soil", "dse_in_dry_soil", "shoot_wt", "florets", "d13c",
+  "c", "d15n", "n", "p")
+
+# Prepare data for PCA
+pca_data <- ds %>%
+  select(genotype, treatment, all_of(all_vars)) %>%
+  # Remove rows with too many missing values (optional threshold)
+  filter(rowSums(is.na(select(., all_of(all_vars)))) <= length(all_vars) * 0.5) %>%
+  # Create a unique identifier for each sample
+  mutate(sample_id = paste(genotype, treatment, row_number(), sep = "_"))
+
+# Remove variables that are mostly NA (optional)
+vars_to_keep <- pca_data %>%
+  select(all_of(all_vars)) %>%
+  summarise_all(~ sum(!is.na(.)) / n()) %>%
+  pivot_longer(everything(), names_to = "variable", values_to = "prop_complete") %>%
+  filter(prop_complete >= 0.3) %>%  # Keep variables with at least 30% complete data
+  pull(variable)
+
+print(paste("Keeping", length(vars_to_keep), "variables for PCA"))
+print(paste("Variables kept:", paste(vars_to_keep, collapse = ", ")))
+
+# Final data preparation Just for Treatment
+#pca_data_final <- pca_data %>%
+# select(sample_id, genotype, treatment, all_of(vars_to_keep)) %>%
+# Remove any remaining rows with all NA values
+# filter(!if_all(all_of(vars_to_keep), is.na))
+
+
+# Final data preparation with Genotype X Treatment
+pca_data_final <- pca_data %>%
+  select(genotype, treatment, all_of(vars_to_keep)) %>%
+  group_by(genotype, treatment) %>%
+  summarise(across(all_of(vars_to_keep), ~ mean(., na.rm = TRUE)), .groups = "drop") %>%
+  mutate(sample_id = paste(genotype, treatment, sep = "_")) %>%
+  filter(!if_all(all_of(vars_to_keep), is.na))
+
+
+# Perform PCA (handling missing values)
+pca_matrix <- pca_data_final %>%
+  select(all_of(vars_to_keep)) %>%
+  as.matrix()
+
+# Option 1: Use only complete cases (most conservative)
+complete_cases <- complete.cases(pca_matrix)
+if(sum(complete_cases) < 10) {
+  cat("Too few complete cases, using imputation method...\n")
+  
+  # Option 2: Simple mean imputation for missing values
+  for(i in 1:ncol(pca_matrix)) {
+    col_mean <- mean(pca_matrix[, i], na.rm = TRUE)
+    pca_matrix[is.na(pca_matrix[, i]), i] <- col_mean
+  }
+  
+  pca_matrix_clean <- pca_matrix
+  pca_data_clean <- pca_data_final
+  
+} else {
+  # Use complete cases
+  cat(paste("Using", sum(complete_cases), "complete cases out of", nrow(pca_matrix), "total samples\n"))
+  pca_matrix_clean <- pca_matrix[complete_cases, ]
+  pca_data_clean <- pca_data_final[complete_cases, ]
+}
+
+# Check for any remaining issues
+if(any(is.na(pca_matrix_clean)) || any(is.infinite(pca_matrix_clean))) {
+  # Additional cleaning if needed
+  pca_matrix_clean[is.na(pca_matrix_clean)] <- 0
+  pca_matrix_clean[is.infinite(pca_matrix_clean)] <- 0
+}
+
+# Perform PCA using prcomp
+pca_result <- prcomp(pca_matrix_clean, scale. = TRUE, center = TRUE)
+
+# Calculate variance explained
+var_explained <- summary(pca_result)$importance[2, ] * 100
+pc1_var <- round(var_explained[1], 1)
+pc2_var <- round(var_explained[2], 1)
+pc3_var <- round(var_explained[3], 1)
+
+# Create PCA data frame for plotting
+pca_df <- data.frame(
+  PC1 = pca_result$x[, 1],
+  PC2 = pca_result$x[, 2],
+  PC3 = pca_result$x[, 3],
+  genotype = pca_data_clean$genotype,
+  treatment = pca_data_clean$treatment,
+  sample_id = pca_data_clean$sample_id
+)
+
+# Get loadings for arrows
+loadings_df <- data.frame(
+  Variable = rownames(pca_result$rotation),
+  PC1 = pca_result$rotation[, 1],
+  PC2 = pca_result$rotation[, 2],
+  PC3 = pca_result$rotation[, 3]
+) %>%
+  # Scale loadings for better visualization
+  mutate(
+    PC1_scaled = PC1 * 3,
+    PC2_scaled = PC2 * 3,
+    PC3_scaled = PC3 * 3
+  )
+
+# Create prettier variable names for loadings
+pretty_var_names <- c(
+  "amf_rlc" = "AMF RLC",
+  "am_hyphae_dse_and_am_rlc" = "AM Hyphae",
+  "arb_ves_and_arb_rlc" = "Arbuscules",
+  "dse_dse_and_am_rlc" = "DSE",
+  "vesicle_or_spore_ves_and_arb_rlc" = "Vesicles/Spores",
+  "lse_rlc" = "LSE",
+  "coil_rlc" = "Coils",
+  "olpidium_rlc" = "Olpidium",
+  "mold_rlc" = "Mold",
+  "plasmodiophorids_rlc" = "Plasmodiophorids",
+  "dot_line_rlc" = "Dot Line",
+  "non_am_rlc" = "Non-AM",
+  "fine_endo_rlc" = "Fine Endophytes",
+  "amf_in_dry_soil" = "AMF in Dry Soil",
+  "dse_in_dry_soil" = "DSE in Dry Soil",
+  "shoot_wt" = "Shoot Weight",
+  "florets" = "Florets",
+  "d13c" = "δ¹³C",
+  "c" = "Carbon Content",
+  "d15n" = "δ¹⁵N",
+  "n" = "Nitrogen Content",
+  "p" = "Phosphorus Content",
+  "cn_ratio" = "C:N Ratio",
+  "np_ratio" = "N:P Ratio"
+)
+
+loadings_df <- loadings_df %>%
+  mutate(Variable_pretty = ifelse(Variable %in% names(pretty_var_names), 
+                                  pretty_var_names[Variable], 
+                                  Variable))
+
+# Create Selective labeling with variable arrow thickness 
+#Only label the most important loadings and use different strategies for others
+
+# Calculate loading strength for arrow thickness
+loadings_with_strength <- loadings_df %>% 
+  filter(abs(PC1) > 0.3 | abs(PC2) > 0.3) %>%
+  mutate(
+    # Calculate the magnitude of loading vector
+    loading_strength = sqrt(PC1^2 + PC2^2),
+    # Create thickness categories
+    thickness_category = case_when(
+      loading_strength >= 0.7 ~ "strong",      # Thickest arrows
+      loading_strength >= 0.5 ~ "medium",     # Medium arrows
+      TRUE ~ "weak"                           # Thinnest arrows
+    ),
+    # Map to actual linewidth values
+    arrow_thickness = case_when(
+      thickness_category == "strong" ~ 1.2,
+      thickness_category == "medium" ~ 0.8,
+      thickness_category == "weak" ~ 0.4
+    ),
+    # Arrow alpha based on strength
+    arrow_alpha = case_when(
+      thickness_category == "strong" ~ 0.9,
+      thickness_category == "medium" ~ 0.7,
+      thickness_category == "weak" ~ 0.5
+    )
+  )
+
+
+
+genotypes_to_plot <- c("156203", "157033", "181080", "181083", "641815", "E29W1")
+
+pca_df_filtered <- pca_df %>%
+  filter(genotype %in% genotypes_to_plot)
+
+# Compute ellipse label positions (center of each treatment group)
+ellipse_labels <- pca_df_filtered %>%
+  group_by(treatment) %>%
+  summarise(PC1 = mean(PC1), PC2 = mean(PC2), .groups = "drop")
+
+
+
+
+
+
+p1_selective <- ggplot(pca_df_filtered, aes(x = PC1, y = PC2)) +
+  stat_ellipse(aes(color = treatment), 
+               alpha = 0.3, type = "norm", level = 0.68, linewidth = 1) +
+  geom_point(aes(color = genotype, shape = treatment), size = 3, alpha = 0.8)+
+  
+  
+  geom_segment(data = loadings_with_strength,
+               aes(x = 0, y = 0, xend = PC1_scaled, yend = PC2_scaled,
+                   linewidth = arrow_thickness, alpha = arrow_alpha),
+               arrow = arrow(length = unit(0.2, "cm")), 
+               color = "gray20") +
+  # Custom linewidth scale
+  scale_linewidth_identity() +
+  scale_alpha_identity() +
+  # Label only the strongest loadings directly
+  geom_text_repel(data = loadings_with_strength %>% 
+                    filter(loading_strength > 0.5), # Use loading_strength instead
+                  aes(x = PC1_scaled * 1.1, y = PC2_scaled * 1.1, 
+                      label = Variable_pretty),
+                  size = 3.5, 
+                  color = "black", 
+                  fontface = "bold",
+                  box.padding = 0.6,
+                  point.padding = 0.3,
+                  force = 3) +
+  # Add full labels for medium-strength loadings using ggrepel
+  geom_text_repel(data = loadings_with_strength %>% 
+                    filter(loading_strength <= 0.5 & loading_strength > 0.3),
+                  aes(x = PC1_scaled * 1.05, y = PC2_scaled * 1.05, 
+                      label = Variable_pretty), # Full labels, not abbreviated
+                  size = 2.8, 
+                  color = "gray40", 
+                  fontface = "plain",
+                  box.padding = 0.3,
+                  point.padding = 0.2,
+                  force = 1.5,
+                  max.overlaps = Inf) +
+                  scale_color_discrete(name = "Genotype") +
+                  #scale_color_manual(values = c(
+                   # "Droughted" = "#D73027",
+                  #  "Watered" = "darkblue" ))
+                  scale_shape_manual(values = c("Droughted" = 17, "Watered" = 16),
+                   name = "Treatment") +
+  labs(
+    x = paste0("PC1 (", pc1_var, "% variance)"),
+    y = paste0("PC2 (", pc2_var, "% variance)"),
+    title = "Principal Component Analysis (Preliminary AMF Colonization Genotypes)",
+    subtitle = "Plant performance, chemistry, and fungal colonization traits",
+    caption = "Arrow thickness indicates loading strength"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray40"),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text = element_text(size = 10),
+    legend.title = element_text(size = 11, face = "bold"),
+    legend.text = element_text(size = 10),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
+    plot.background = element_rect(fill = "white", color = NA),
+    plot.caption = element_text(size = 9, color = "gray50")
+  )
+
+# Display the selective approach with variable arrow thickness
+print(p1_selective)
+
+
+
+
+
+
+
+
+# Print loading strength summary for reference
+cat("\nLoading strength summary:\n")
+strength_summary <- loadings_with_strength %>%
+  select(Variable_pretty, loading_strength, thickness_category) %>%
+  arrange(desc(loading_strength))
+print(strength_summary)
+
+
+# Create a scree plot
+scree_data <- data.frame(
+  PC = paste0("PC", 1:min(10, ncol(pca_result$x))),
+  Variance = var_explained[1:min(10, length(var_explained))]
+) %>%
+  mutate(PC = factor(PC, levels = PC))
+
+p2 <- ggplot(scree_data, aes(x = PC, y = Variance)) +
+  geom_col(fill = "steelblue", alpha = 0.7, width = 0.6) +
+  geom_text(aes(label = paste0(round(Variance, 1), "%")), 
+            vjust = -0.5, size = 3, fontface = "bold") +
+  labs(
+    x = "Principal Component",
+    y = "Variance Explained (%)",
+    title = "Scree Plot",
+    subtitle = "Variance explained by each PC"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 10, hjust = 0.5, color = "gray40"),
+    axis.title = element_text(size = 11, face = "bold"),
+    axis.text = element_text(size = 9),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8)
+  )
+
+print(p2)
+
+
+# Print summary statistics
+cat("\n=== PCA SUMMARY ===\n")
+cat(paste("Total samples included:", nrow(pca_df), "\n"))
+cat(paste("Total variables included:", length(vars_to_keep), "\n"))
+cat(paste("PC1 variance explained:", pc1_var, "%\n"))
+cat(paste("PC2 variance explained:", pc2_var, "%\n"))
+cat(paste("PC3 variance explained:", pc3_var, "%\n"))
+cat(paste("Cumulative variance (PC1+PC2):", round(pc1_var + pc2_var, 1), "%\n"))
+
+# Optional: Save plots
+ggsave("pca_biplot.png", plot = p1_selective, width = 12, height = 8, dpi = 300, bg = "white")
+ggsave("pca_scree.png", plot = p2, width = 8, height = 6, dpi = 300, bg = "white")
+
+genotypes_to_plot <- c("156203", "157033", "181080", "181083", "641815", "E29W1")
+
+pca_df_filtered <- pca_df %>%
+  filter(genotype %in% genotypes_to_plot)
+
+# Compute ellipse label positions (center of each treatment group)
+ellipse_labels <- pca_df_filtered %>%
+  group_by(treatment) %>%
+  summarise(PC1 = mean(PC1), PC2 = mean(PC2), .groups = "drop")
+
+p1_treatment_ellipse <- ggplot(pca_df_filtered, aes(x = PC1, y = PC2)) +
+  # Ellipses colored by treatment
+  stat_ellipse(aes(color = treatment), 
+               alpha = 0.3, type = "norm", level = 0.68, linewidth = 1.2) +
+  
+  # Label treatment ellipses directly
+  geom_text_repel(data = ellipse_labels,
+                  aes(x = PC1, y = PC2, label = treatment, color = treatment),
+                  size = 4.5, fontface = "bold",
+                  segment.color = NA) +
+  
+  # Points: colored by genotype, shaped by treatment
+  geom_point(aes(color = genotype, shape = treatment), size = 2.5, alpha = 0.9) +
+  
+  # Arrows (loadings)
+  geom_segment(data = loadings_with_strength,
+               aes(x = 0, y = 0, xend = PC1_scaled, yend = PC2_scaled,
+                   linewidth = arrow_thickness, alpha = arrow_alpha),
+               arrow = arrow(length = unit(0.2, "cm")),
+               color = "gray20") +
+  
+  # Labels for strong loadings
+  geom_text_repel(data = loadings_with_strength %>% filter(loading_strength > 0.5),
+                  aes(x = PC1_scaled * 1.1, y = PC2_scaled * 1.1, label = Variable_pretty),
+                  size = 3.5, color = "black", fontface = "bold",
+                  box.padding = 0.6, point.padding = 0.3, force = 3) +
+  
+  # Manual color and shape scales
+  scale_color_manual(values = c(
+    "Droughted" = "#D73027",
+    "Watered" = "#1A9850"
+  )) +
+  
+  scale_shape_manual(values = c("Droughted" = 17, "Watered" = 16)) +
+  
+  # Remove redundant legends
+  guides(color = "none") +
+  
+  # Labels and theme
+  labs(
+    x = paste0("PC1 (", pc1_var, "% variance)"),
+    y = paste0("PC2 (", pc2_var, "% variance)"),
+    title = "PCA: Ellipses by Treatment, Points Colored by Genotype",
+    subtitle = "Colonization, Traits & Nutrients | Genotypes: selected subset",
+    caption = "Ellipses show 68% confidence by treatment; arrows = loading strength"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray40"),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text = element_text(size = 10),
+    legend.title = element_text(size = 11, face = "bold"),
+    legend.text = element_text(size = 10),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
+    plot.background = element_rect(fill = "white", color = NA),
+    plot.caption = element_text(size = 9, color = "gray50")
+  )
+# creat plot
+print(p1_treatment_ellipse)

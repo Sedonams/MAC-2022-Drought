@@ -1,0 +1,283 @@
+Plot summaries for MAC-2022-Drought (script: scripts/MAC22_BB.R)
+Generated: 2025-08-15
+
+Purpose
+-------
+This document briefly describes each plot produced by `scripts/MAC22_BB.R`, what the plot shows, how to read it, and suggested follow-up checks or analyses.
+
+
+11) PCA of drought-response traits (scree, loadings, biplot)
+------------------------------------------------------------
+What: PCA on genotype-level drought effect matrix (scree = variance per PC; loadings = trait contributions; biplot = genotypes & arrows for traits).
+Read: Scree: how many PCs explain majority variance. Loadings: which traits define each PC (syndromes). Biplot: which genotypes express those syndromes.
+Check: PCA requires numeric matrix with no Inf; script handles NA-imputation and drops sparse rows/cols before PCA.
+Next: regress PC scores against performance metrics (shoot_wt_eff, florets_eff) — script includes `lm_shoot` and `lm_florets` fits and plots (`p_shoot`, `p_florets`).
+
+12) Correlation heatmaps (plant traits + origins, RR vs origins, enhanced heatmap)
+---------------------------------------------------------------------------------
+What: Several heatmaps showing Pearson r between plant traits, origins variables, and drought response ratios with significance annotations.
+Read: Look for strong positive/negative correlations and significant p-values to identify trait-origin relationships.
+Check: Variables included only if they have enough non-NA observations; inspect 'available_origins_continuous' list printed earlier.
+Next: follow-ups: build regression models for key trait-origin pairs and correct for multiple testing.
+
+13) Drought-effect significance heatmaps (corrected scoring)
+-----------------------------------------------------------
+What: Tile heatmaps showing per-genotype per-trait significance and drought_tolerance_score (trait-specific scoring), and comparison panels between original and corrected scoring.
+Read: Green tiles = drought-tolerant response (trait-specific), red = sensitive. Labels show significance (***, **, *).
+Check: Examine which genotypes show consistent tolerance across multiple traits.
+Next: extract top tolerant genotypes and validate using raw trait values and mixed models.
+
+14) Focused RR vs Origins and response-ratio plots
+---------------------------------------------------
+What: Focused heatmaps between response ratios and origin traits, and extracts strongest correlations.
+Read: Which origin characteristics (geography, phenology, trait) associate with drought-response traits.
+Check: Confirm origin variable units and scale (some columns have text or unusual formatting).
+Next: prepare publication-ready tables of strongest associations with adjusted p-values.
+
+General notes and actions
+-------------------------
+- Many plots include `stat_n_text()` annotations; always verify sample counts for interpretability.
+- PCA and correlation steps drop variables/rows with insufficient data; check printed messages (available variable lists and counts) after running the script.
+- If you plan to export figures, add `ggsave()` calls after the ggplot call with chosen filenames and sizes.
+- For plots that compare slopes (e.g., AMF vs RLC_P) prefer explicit lm with interaction term and report model coefficients rather than visual only.
+
+Where to review
+----------------
+Open `scripts/MAC22_BB.R` and search for the plot titles or section comments (e.g., "#------macombo plots----", "#----------MAC 2022 Probe Data----", "#---------MAC 2022 EMH Graph-----", "#-------g2combo plots----"). This README-like file points to expected plot blocks.
+
+If you want, I can:
+- create a folder `plots/` and save each current ggplot automatically with descriptive filenames,
+- add textual output (numbers) next to plots (e.g., R², p-values saved to `results/`), or
+- run the script and collect numeric summaries into `results/plot_results_summary.csv`.
+
+End of summaries
+
+
+--- Numeric summaries appended by scripts/generate_report.R ---
+Number of significant genotype x trait tests (p < 0.05):  75 
+
+Top 10 absolute effects (genotype, variable, effect):
+# A tibble: 10 × 3
+   genotype variable effect
+   <chr>    <chr>     <dbl>
+ 1 533792   c          1.85
+ 2 226096   c          1.82
+ 3 655983   c          1.77
+ 4 176766   c          1.76
+ 5 562732   c          1.76
+ 6 152961   d13c      -1.76
+ 7 176766   d13c      -1.74
+ 8 562781   n          1.72
+ 9 514456   d13c      -1.70
+10 527045   d13c      -1.70
+
+PCA variance explained (first 6 PCs):
+  PC VarPct CumPct
+1  1   25.3   25.3
+2  2   24.7   50.0
+3  3   15.9   65.9
+4  4   12.4   78.3
+5  5    9.2   87.5
+6  6    7.4   94.9
+
+Shoot weight model summary (shoot_wt_eff ~ PC1 + PC2):
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept) -0.5156706 0.06912076 -7.460430 5.040638e-09
+PC1          0.2601639 0.05261320  4.944840 1.490327e-05
+PC2          0.2611959 0.05316591  4.912845 1.648276e-05
+
+R-squared:  0.555 
+
+Florets model summary (florets_eff ~ PC1 + PC2):
+               Estimate Std. Error    t value     Pr(>|t|)
+(Intercept) -0.42678119 0.09621671 -4.4356244 7.292077e-05
+PC1          0.31518630 0.07323805  4.3035871 1.093440e-04
+PC2         -0.03442953 0.07400741 -0.4652174 6.443631e-01
+
+R-squared:  0.325 
+
+Report generated: results/report.md
+
+
+--- Numeric summaries appended by scripts/generate_report.R ---
+Number of significant genotype x trait tests (p < 0.05):  75 
+
+Top 10 absolute effects (genotype, variable, effect):
+# A tibble: 10 × 3
+   genotype variable effect
+   <chr>    <chr>     <dbl>
+ 1 533792   c          1.85
+ 2 226096   c          1.82
+ 3 655983   c          1.77
+ 4 176766   c          1.76
+ 5 562732   c          1.76
+ 6 152961   d13c      -1.76
+ 7 176766   d13c      -1.74
+ 8 562781   n          1.72
+ 9 514456   d13c      -1.70
+10 527045   d13c      -1.70
+
+PCA variance explained (first 6 PCs):
+  PC VarPct CumPct
+1  1   25.3   25.3
+2  2   24.7   50.0
+3  3   15.9   65.9
+4  4   12.4   78.3
+5  5    9.2   87.5
+6  6    7.4   94.9
+
+Shoot weight model summary (shoot_wt_eff ~ PC1 + PC2):
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept) -0.5156706 0.06912076 -7.460430 5.040638e-09
+PC1          0.2601639 0.05261320  4.944840 1.490327e-05
+PC2          0.2611959 0.05316591  4.912845 1.648276e-05
+
+R-squared:  0.555 
+
+Florets model summary (florets_eff ~ PC1 + PC2):
+               Estimate Std. Error    t value     Pr(>|t|)
+(Intercept) -0.42678119 0.09621671 -4.4356244 7.292077e-05
+PC1          0.31518630 0.07323805  4.3035871 1.093440e-04
+PC2         -0.03442953 0.07400741 -0.4652174 6.443631e-01
+
+R-squared:  0.325 
+
+Report generated: results/report.md
+
+
+--- Numeric summaries appended by scripts/generate_report.R ---
+Number of significant genotype x trait tests (p < 0.05):  75 
+
+Top 10 absolute effects (genotype, variable, effect):
+# A tibble: 10 × 3
+   genotype variable effect
+   <chr>    <chr>     <dbl>
+ 1 533792   c          1.85
+ 2 226096   c          1.82
+ 3 655983   c          1.77
+ 4 176766   c          1.76
+ 5 562732   c          1.76
+ 6 152961   d13c      -1.76
+ 7 176766   d13c      -1.74
+ 8 562781   n          1.72
+ 9 514456   d13c      -1.70
+10 527045   d13c      -1.70
+
+PCA variance explained (first 6 PCs):
+  PC VarPct CumPct
+1  1   25.3   25.3
+2  2   24.7   50.0
+3  3   15.9   65.9
+4  4   12.4   78.3
+5  5    9.2   87.5
+6  6    7.4   94.9
+
+Shoot weight model summary (shoot_wt_eff ~ PC1 + PC2):
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept) -0.5156706 0.06912076 -7.460430 5.040638e-09
+PC1          0.2601639 0.05261320  4.944840 1.490327e-05
+PC2          0.2611959 0.05316591  4.912845 1.648276e-05
+
+R-squared:  0.555 
+
+Florets model summary (florets_eff ~ PC1 + PC2):
+               Estimate Std. Error    t value     Pr(>|t|)
+(Intercept) -0.42678119 0.09621671 -4.4356244 7.292077e-05
+PC1          0.31518630 0.07323805  4.3035871 1.093440e-04
+PC2         -0.03442953 0.07400741 -0.4652174 6.443631e-01
+
+R-squared:  0.325 
+
+Report generated: results/report.md
+
+
+--- Numeric summaries appended by scripts/generate_report.R ---
+Number of significant genotype x trait tests (p < 0.05):  75 
+
+Top 10 absolute effects (genotype, variable, effect):
+# A tibble: 10 × 3
+   genotype variable effect
+   <chr>    <chr>     <dbl>
+ 1 533792   c          1.85
+ 2 226096   c          1.82
+ 3 655983   c          1.77
+ 4 176766   c          1.76
+ 5 562732   c          1.76
+ 6 152961   d13c      -1.76
+ 7 176766   d13c      -1.74
+ 8 562781   n          1.72
+ 9 514456   d13c      -1.70
+10 527045   d13c      -1.70
+
+PCA variance explained (first 6 PCs):
+  PC VarPct CumPct
+1  1   25.3   25.3
+2  2   24.7   50.0
+3  3   15.9   65.9
+4  4   12.4   78.3
+5  5    9.2   87.5
+6  6    7.4   94.9
+
+Shoot weight model summary (shoot_wt_eff ~ PC1 + PC2):
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept) -0.5156706 0.06912076 -7.460430 5.040638e-09
+PC1          0.2601639 0.05261320  4.944840 1.490327e-05
+PC2          0.2611959 0.05316591  4.912845 1.648276e-05
+
+R-squared:  0.555 
+
+Florets model summary (florets_eff ~ PC1 + PC2):
+               Estimate Std. Error    t value     Pr(>|t|)
+(Intercept) -0.42678119 0.09621671 -4.4356244 7.292077e-05
+PC1          0.31518630 0.07323805  4.3035871 1.093440e-04
+PC2         -0.03442953 0.07400741 -0.4652174 6.443631e-01
+
+R-squared:  0.325 
+
+Report generated: results/report.md
+
+
+--- Numeric summaries appended by scripts/generate_report.R ---
+Number of significant genotype x trait tests (p < 0.05):  75 
+
+Top 10 absolute effects (genotype, variable, effect):
+# A tibble: 10 × 3
+   genotype variable effect
+   <chr>    <chr>     <dbl>
+ 1 533792   c          1.85
+ 2 226096   c          1.82
+ 3 655983   c          1.77
+ 4 176766   c          1.76
+ 5 562732   c          1.76
+ 6 152961   d13c      -1.76
+ 7 176766   d13c      -1.74
+ 8 562781   n          1.72
+ 9 514456   d13c      -1.70
+10 527045   d13c      -1.70
+
+PCA variance explained (first 6 PCs):
+  PC VarPct CumPct
+1  1   25.3   25.3
+2  2   24.7   50.0
+3  3   15.9   65.9
+4  4   12.4   78.3
+5  5    9.2   87.5
+6  6    7.4   94.9
+
+Shoot weight model summary (shoot_wt_eff ~ PC1 + PC2):
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept) -0.5156706 0.06912076 -7.460430 5.040638e-09
+PC1          0.2601639 0.05261320  4.944840 1.490327e-05
+PC2          0.2611959 0.05316591  4.912845 1.648276e-05
+
+R-squared:  0.555 
+
+Florets model summary (florets_eff ~ PC1 + PC2):
+               Estimate Std. Error    t value     Pr(>|t|)
+(Intercept) -0.42678119 0.09621671 -4.4356244 7.292077e-05
+PC1          0.31518630 0.07323805  4.3035871 1.093440e-04
+PC2         -0.03442953 0.07400741 -0.4652174 6.443631e-01
+
+R-squared:  0.325 
+
+Report generated: results/report.md

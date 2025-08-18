@@ -175,3 +175,37 @@ $`3`$sizes
 [1] 28  4 10
 
 
+silhouette log for possible ks:
+$`2`
+$`2`$sil
+[1] 0.543252
+
+$`2`$sizes
+[1] 25 17
+
+
+$`3`
+$`3`$sil
+[1] 0.5922342
+
+$`3`$sizes
+[1] 28  4 10
+
+
+silhouette log for possible ks:
+$`2`
+$`2`$sil
+[1] 0.543252
+
+$`2`$sizes
+[1] 25 17
+
+
+$`3`
+$`3`$sil
+[1] 0.5922342
+
+$`3`$sizes
+[1] 28  4 10
+
+

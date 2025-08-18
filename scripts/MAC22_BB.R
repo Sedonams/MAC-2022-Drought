@@ -309,6 +309,29 @@ try({
   }
 }, silent = TRUE)
 
+# Also produce a version with exactly two group ellipses (visual only)
+try({
+  s2 <- scores_now
+  if (!"genotype" %in% colnames(s2)) s2$genotype <- rownames(s2)
+  # if cluster_for_geno exists and has length matching effect_imp, prefer mapping; otherwise recluster PC1 into 2 groups
+  if (exists("cluster_for_geno") && length(cluster_for_geno) == nrow(effect_imp)) {
+    # create binary grouping by kmeans on PC1 to avoid altering saved cluster_for_geno
+    km2 <- kmeans(s2$PC1, centers = 2)
+    s2$group2 <- as.factor(km2$cluster)
+  } else {
+    km2 <- kmeans(s2$PC1, centers = 2)
+    s2$group2 <- as.factor(km2$cluster)
+  }
+
+  p_2g <- p_load +
+    geom_point(data = s2, aes(x = PC1, y = PC2, color = group2), size = 2, inherit.aes = FALSE) +
+    stat_ellipse(data = s2, aes(x = PC1, y = PC2, fill = group2, color = group2), geom = 'polygon', alpha = 0.15, level = 0.68, show.legend = TRUE) +
+    scale_fill_brewer(palette = 'Set1') +
+    scale_color_brewer(palette = 'Set1') +
+    labs(title = 'Trait loadings on PC1 vs PC2 (2-group ellipses)')
+  ggsave('plots/pca_trait_loadings_with_2group_ellipses.png', plot = p_2g, width = 8, height = 6, dpi = 300)
+}, silent = TRUE)
+
 
 # build genotype × treatment matrix (mean per cell), then PCA
 gt_mat <- filtered_long_data %>%

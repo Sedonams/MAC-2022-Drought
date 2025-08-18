@@ -225,10 +225,11 @@ F-statistic: 9.369 on 2 and 39 DF,  p-value: 0.0004757
 ```
 
 <!-- AUTO-REPORT-START -->
+<!-- AUTO-REPORT-START -->
 
 # Auto-generated: Figures and numeric summaries
 
-Generated: 2025-08-15
+Generated: 2025-08-18
 
 ## Figures (auto-inserted)
 
@@ -358,4 +359,6 @@ F-statistic: 9.369 on 2 and 39 DF,  p-value: 0.0004757
 
 ```
 
+<!-- AUTO-REPORT-END -->
+<!-- AUTO-REPORT-END -->
 <!-- AUTO-REPORT-END -->

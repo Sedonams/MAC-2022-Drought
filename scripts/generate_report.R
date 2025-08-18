@@ -4,6 +4,7 @@
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(ggrepel)
 
 # Paths
 data_file <- "data/MAC22_cleaned.csv"
@@ -70,13 +71,23 @@ scores$genotype <- rownames(scores)
 perf <- data.frame(genotype = rownames(effect_imp))
 perf$shoot_wt_eff <- if("shoot_wt" %in% colnames(effect_imp)) effect_imp[, "shoot_wt"] else NA
 perf$florets_eff <- if("florets" %in% colnames(effect_imp)) effect_imp[, "florets"] else NA
+perf$p_effect <- if("p" %in% colnames(effect_imp)) effect_imp[, "p"] else NA
 scores_perf <- left_join(scores, perf, by = "genotype")
 write.csv(scores_perf, file.path(results_dir, "pca_genotype_scores_and_performance_regen.csv"), row.names = FALSE)
 
 # Linear models
-lm_shoot <- NULL; lm_florets <- NULL; lm_shoot_sum <- NULL; lm_florets_sum <- NULL
+lm_shoot <- NULL; lm_florets <- NULL; lm_p <- NULL; lm_shoot_sum <- NULL; lm_florets_sum <- NULL; lm_p_sum <- NULL
 if (!all(is.na(scores_perf$shoot_wt_eff))) { lm_shoot <- lm(shoot_wt_eff ~ PC1 + PC2, data = scores_perf); lm_shoot_sum <- summary(lm_shoot) }
 if (!all(is.na(scores_perf$florets_eff))) { lm_florets <- lm(florets_eff ~ PC1 + PC2, data = scores_perf); lm_florets_sum <- summary(lm_florets) }
+if (!all(is.na(scores_perf$p_effect))) { lm_p <- lm(p_effect ~ PC1 + PC2, data = scores_perf); lm_p_sum <- summary(lm_p) }
+
+# Optional: create a simple scatter+lm plot for p_effect
+if (!all(is.na(scores_perf$p_effect))) {
+  p_p <- ggplot(scores_perf, aes(x = PC1, y = p_effect, label = genotype)) +
+    geom_point() + geom_smooth(method = "lm", se = TRUE) + ggrepel::geom_text_repel(size = 3) +
+    labs(title = "PC1 vs P effect")
+  ggsave(file.path(plots_dir, "pca_p_effect.png"), plot = p_p, width = 8, height = 6, dpi = 300)
+}
 
 # Append numeric outputs to results/plot_summaries.txt
 sink(summary_txt, append = TRUE)
@@ -164,6 +175,81 @@ if (!is.null(lm_shoot_sum)) {
 }
 if (!is.null(lm_florets_sum)) {
   auto_section <- c(auto_section, '', '### Florets model: florets_eff ~ PC1 + PC2', '', '```', capture.output(print(lm_florets_sum)), '```')
+}
+
+# ---- mycorrhizal variables correlation with PC1 ----
+mycorrhizal_vars <- c("amf_in_dry_soil", "rlc_p", "dse_in_dry_soil", "amf_tot",
+                      "dse_tot", "spores", "dse_hyphae", "fine_amf",
+                      "coarse_amf", "ves_and_arb", "dse_and_am", "vesicle_or_spore",
+                      "dse", "lse", "am_hyphae", "no_fungus",
+                      "arb", "olpidium", "tot")
+
+# Compute genotype-level drought effect for each mycorrhizal var (Droughted - Watered)
+myco_long <- ds %>% select(genotype, treatment, intersect(mycorrhizal_vars, names(ds))) %>%
+  pivot_longer(cols = -c(genotype, treatment), names_to = "variable", values_to = "value") %>%
+  group_by(genotype, treatment, variable) %>%
+  summarise(mean_val = mean(value, na.rm = TRUE), .groups = 'drop') %>%
+  pivot_wider(names_from = treatment, values_from = mean_val) %>%
+  mutate(effect = Droughted - Watered) %>%
+  filter(!is.na(effect))
+
+if (nrow(myco_long) > 0) {
+  myco_wide <- myco_long %>% select(genotype, variable, effect) %>% pivot_wider(names_from = variable, values_from = effect)
+  # align with PCA genotypes
+  common_genos <- intersect(rownames(effect_imp), myco_wide$genotype)
+  if (length(common_genos) > 0) {
+  myco_sub <- myco_wide %>% filter(genotype %in% common_genos)
+  myco_sub <- as.data.frame(myco_sub)
+  rownames(myco_sub) <- myco_sub$genotype
+  myco_sub$genotype <- NULL
+  pc1_scores <- scores$PC1[match(rownames(myco_sub), scores$genotype)]
+    cor_list <- lapply(colnames(myco_sub), function(var) {
+      eff <- as.numeric(myco_sub[[var]])
+      ok <- !is.na(eff) & !is.na(pc1_scores)
+      if (sum(ok) >= 3) {
+        ct <- cor.test(eff[ok], pc1_scores[ok])
+        data.frame(variable = var, cor = unname(ct$estimate), p.value = ct$p.value, n = sum(ok))
+      } else {
+        data.frame(variable = var, cor = NA_real_, p.value = NA_real_, n = sum(ok))
+      }
+    })
+    cor_df <- do.call(rbind, cor_list)
+    write.csv(cor_df, file.path(results_dir, 'pca_mycorrhizal_correlations.csv'), row.names = FALSE)
+
+    # Create scatter plots for each mycorrhizal var vs PC1
+    for (var in cor_df$variable) {
+      plot_df <- data.frame(genotype = rownames(myco_sub), effect = as.numeric(myco_sub[[var]]), PC1 = pc1_scores)
+      p_plot <- ggplot(plot_df, aes(x = PC1, y = effect, label = genotype)) +
+        geom_point() + geom_smooth(method = 'lm', se = TRUE) + ggrepel::geom_text_repel(size = 3) +
+        labs(title = paste('PC1 vs', var, 'effect'), x = 'PC1', y = paste(var, 'effect (Drought - Watered)')) +
+        theme_minimal()
+      ggsave(file.path(plots_dir, paste0('pca_myco_', var, '_vs_PC1.png')), plot = p_plot, width = 8, height = 6, dpi = 300)
+    }
+
+    # FDR-correct p-values and pick top associations
+    cor_df$padj <- p.adjust(cor_df$p.value, method = 'BH')
+    # order by absolute correlation
+    cor_df_ord <- cor_df %>% arrange(desc(abs(cor)))
+    write.csv(cor_df_ord, file.path(results_dir, 'pca_mycorrhizal_correlations_with_fdr.csv'), row.names = FALSE)
+
+    # top 3 associations by absolute correlation
+    top_myco <- head(cor_df_ord, 3)
+
+    # build short interpretations for the top associations
+    top_lines <- apply(top_myco, 1, function(r) {
+      var <- r['variable']; corv <- as.numeric(r['cor']); padj <- as.numeric(r['padj'])
+      sign_txt <- ifelse(corv > 0, 'higher PC1 scores are associated with larger drought-induced increases', 'higher PC1 scores are associated with larger drought-induced decreases')
+      sprintf('- %s: r=%.2f, FDR p=%.3g — %s in %s', var, corv, padj, sign_txt, var)
+    })
+
+    # add correlation table and top-variable interpretations to auto_section
+    auto_section <- c(auto_section, '', '## Mycorrhizal × PC1 correlations', '', paste0('Full table written to `results/pca_mycorrhizal_correlations_with_fdr.csv`'), '')
+    auto_section <- c(auto_section, '', '### Top mycorrhizal associations with PC1', '', top_lines, '')
+    # also include small embedded previews (links) for the top variables
+    for (v in top_myco$variable) {
+      auto_section <- c(auto_section, paste0('![](', file.path('..', plots_dir, paste0('pca_myco_', v, '_vs_PC1.png')), ')'), '')
+    }
+  }
 }
 
 auto_section <- c(auto_section, '', '<!-- AUTO-REPORT-END -->')

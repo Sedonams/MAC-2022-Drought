@@ -281,3 +281,141 @@ PC2         -0.03442953 0.07400741 -0.4652174 6.443631e-01
 R-squared:  0.325 
 
 Report generated: results/report.md
+
+
+--- Numeric summaries appended by scripts/generate_report.R ---
+Number of significant genotype x trait tests (p < 0.05):  75 
+
+Top 10 absolute effects (genotype, variable, effect):
+# A tibble: 10 × 3
+   genotype variable effect
+   <chr>    <chr>     <dbl>
+ 1 533792   c          1.85
+ 2 226096   c          1.82
+ 3 655983   c          1.77
+ 4 176766   c          1.76
+ 5 562732   c          1.76
+ 6 152961   d13c      -1.76
+ 7 176766   d13c      -1.74
+ 8 562781   n          1.72
+ 9 514456   d13c      -1.70
+10 527045   d13c      -1.70
+
+PCA variance explained (first 6 PCs):
+  PC VarPct CumPct
+1  1   25.3   25.3
+2  2   24.7   50.0
+3  3   15.9   65.9
+4  4   12.4   78.3
+5  5    9.2   87.5
+6  6    7.4   94.9
+
+Shoot weight model summary (shoot_wt_eff ~ PC1 + PC2):
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept) -0.5156706 0.06912076 -7.460430 5.040638e-09
+PC1          0.2601639 0.05261320  4.944840 1.490327e-05
+PC2          0.2611959 0.05316591  4.912845 1.648276e-05
+
+R-squared:  0.555 
+
+Florets model summary (florets_eff ~ PC1 + PC2):
+               Estimate Std. Error    t value     Pr(>|t|)
+(Intercept) -0.42678119 0.09621671 -4.4356244 7.292077e-05
+PC1          0.31518630 0.07323805  4.3035871 1.093440e-04
+PC2         -0.03442953 0.07400741 -0.4652174 6.443631e-01
+
+R-squared:  0.325 
+
+Report generated: results/report.md
+
+
+--- Numeric summaries appended by scripts/generate_report.R ---
+Number of significant genotype x trait tests (p < 0.05):  75 
+
+Top 10 absolute effects (genotype, variable, effect):
+# A tibble: 10 × 3
+   genotype variable effect
+   <chr>    <chr>     <dbl>
+ 1 533792   c          1.85
+ 2 226096   c          1.82
+ 3 655983   c          1.77
+ 4 176766   c          1.76
+ 5 562732   c          1.76
+ 6 152961   d13c      -1.76
+ 7 176766   d13c      -1.74
+ 8 562781   n          1.72
+ 9 514456   d13c      -1.70
+10 527045   d13c      -1.70
+
+PCA variance explained (first 6 PCs):
+  PC VarPct CumPct
+1  1   25.3   25.3
+2  2   24.7   50.0
+3  3   15.9   65.9
+4  4   12.4   78.3
+5  5    9.2   87.5
+6  6    7.4   94.9
+
+Shoot weight model summary (shoot_wt_eff ~ PC1 + PC2):
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept) -0.5156706 0.06912076 -7.460430 5.040638e-09
+PC1          0.2601639 0.05261320  4.944840 1.490327e-05
+PC2          0.2611959 0.05316591  4.912845 1.648276e-05
+
+R-squared:  0.555 
+
+Florets model summary (florets_eff ~ PC1 + PC2):
+               Estimate Std. Error    t value     Pr(>|t|)
+(Intercept) -0.42678119 0.09621671 -4.4356244 7.292077e-05
+PC1          0.31518630 0.07323805  4.3035871 1.093440e-04
+PC2         -0.03442953 0.07400741 -0.4652174 6.443631e-01
+
+R-squared:  0.325 
+
+Report generated: results/report.md
+
+
+--- Numeric summaries appended by scripts/generate_report.R ---
+Number of significant genotype x trait tests (p < 0.05):  75 
+
+Top 10 absolute effects (genotype, variable, effect):
+# A tibble: 10 × 3
+   genotype variable effect
+   <chr>    <chr>     <dbl>
+ 1 533792   c          1.85
+ 2 226096   c          1.82
+ 3 655983   c          1.77
+ 4 176766   c          1.76
+ 5 562732   c          1.76
+ 6 152961   d13c      -1.76
+ 7 176766   d13c      -1.74
+ 8 562781   n          1.72
+ 9 514456   d13c      -1.70
+10 527045   d13c      -1.70
+
+PCA variance explained (first 6 PCs):
+  PC VarPct CumPct
+1  1   25.3   25.3
+2  2   24.7   50.0
+3  3   15.9   65.9
+4  4   12.4   78.3
+5  5    9.2   87.5
+6  6    7.4   94.9
+
+Shoot weight model summary (shoot_wt_eff ~ PC1 + PC2):
+              Estimate Std. Error   t value     Pr(>|t|)
+(Intercept) -0.5156706 0.06912076 -7.460430 5.040638e-09
+PC1          0.2601639 0.05261320  4.944840 1.490327e-05
+PC2          0.2611959 0.05316591  4.912845 1.648276e-05
+
+R-squared:  0.555 
+
+Florets model summary (florets_eff ~ PC1 + PC2):
+               Estimate Std. Error    t value     Pr(>|t|)
+(Intercept) -0.42678119 0.09621671 -4.4356244 7.292077e-05
+PC1          0.31518630 0.07323805  4.3035871 1.093440e-04
+PC2         -0.03442953 0.07400741 -0.4652174 6.443631e-01
+
+R-squared:  0.325 
+
+Report generated: results/report.md

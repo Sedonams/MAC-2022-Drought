@@ -1,0 +1,17 @@
+Diagnostic for trait grouping by PC1
+trait_group_k = 2 
+nrow(effect_imp) = 42 
+length(scores$genotype) = 42 
+first 10 effect_imp rownames:
+ [1] "152961" "152966" "155149" "156203" "156487" "157033" "176766" "179749"
+ [9] "181080" "181083"
+first 10 scores genotypes:
+ [1] "152961" "152966" "155149" "156203" "156487" "157033" "176766" "179749"
+ [9] "181080" "181083"
+matched count: 42 of 42 
+raw_clusters length: 42 
+clusters_ord length: 42 
+cluster_for_geno length: 42 
+cluster_for_geno summary:
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  1.000   1.000   1.000   1.405   2.000   2.000 

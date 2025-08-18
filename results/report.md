@@ -359,6 +359,27 @@ F-statistic: 9.369 on 2 and 39 DF,  p-value: 0.0004757
 
 ```
 
+## Mycorrhizal × PC1 correlations
+
+Full table written to `results/pca_mycorrhizal_correlations_with_fdr.csv`
+
+
+### Top mycorrhizal associations with PC1
+
+- fine_amf: r=0.65, FDR p=0.957 — higher PC1 scores are associated with larger drought-induced increases in fine_amf
+- dse_in_dry_soil: r=-0.57, FDR p=0.957 — higher PC1 scores are associated with larger drought-induced decreases in dse_in_dry_soil
+- dse_tot: r=-0.52, FDR p=0.957 — higher PC1 scores are associated with larger drought-induced decreases in dse_tot
+
+![](../plots/pca_myco_fine_amf_vs_PC1.png)
+
+![](../plots/pca_myco_dse_in_dry_soil_vs_PC1.png)
+
+![](../plots/pca_myco_dse_tot_vs_PC1.png)
+
+
+<!-- AUTO-REPORT-END -->
+<!-- AUTO-REPORT-END -->
+<!-- AUTO-REPORT-END -->
 <!-- AUTO-REPORT-END -->
 <!-- AUTO-REPORT-END -->
 <!-- AUTO-REPORT-END -->

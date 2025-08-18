@@ -84,7 +84,7 @@ if (!all(is.na(scores_perf$p_effect))) { lm_p <- lm(p_effect ~ PC1 + PC2, data =
 # Optional: create a simple scatter+lm plot for p_effect
 if (!all(is.na(scores_perf$p_effect))) {
   p_p <- ggplot(scores_perf, aes(x = PC1, y = p_effect, label = genotype)) +
-    geom_point() + geom_smooth(method = "lm", se = TRUE) + ggrepel::geom_text_repel(size = 3) +
+  geom_point() + geom_smooth(method = "lm", formula = y ~ x, se = TRUE) + ggrepel::geom_text_repel(size = 3) +
     labs(title = "PC1 vs P effect")
   ggsave(file.path(plots_dir, "pca_p_effect.png"), plot = p_p, width = 8, height = 6, dpi = 300)
 }
@@ -100,6 +100,89 @@ print(round(head(data.frame(PC = seq_along(var_expl), VarPct = 100*var_expl, Cum
 if (!is.null(lm_shoot_sum)) { cat('\nShoot weight model summary (shoot_wt_eff ~ PC1 + PC2):\n'); print(lm_shoot_sum$coef); cat('\nR-squared: ', round(lm_shoot_sum$r.squared,3), '\n') }
 if (!is.null(lm_florets_sum)) { cat('\nFlorets model summary (florets_eff ~ PC1 + PC2):\n'); print(lm_florets_sum$coef); cat('\nR-squared: ', round(lm_florets_sum$r.squared,3), '\n') }
 cat('\nReport generated: results/report.md\n')
+sink()
+
+# ---- PC1 backing metrics ----
+pc1_var_pct <- 100 * var_expl[1]
+
+top_loadings <- data.frame(variable = rownames(pca$rotation), loading = pca$rotation[,"PC1"], stringsAsFactors = FALSE)
+top_loadings <- top_loadings[order(-abs(top_loadings$loading)), ]
+write.csv(top_loadings, file.path(results_dir, "pca_PC1_top_loadings_regen.csv"), row.names = FALSE)
+
+scores_perf$PC1_group <- dplyr::ntile(scores_perf$PC1, 2)
+group_summary <- scores_perf %>% dplyr::group_by(PC1_group) %>% dplyr::summarise(n = dplyr::n(), mean = mean(PC1, na.rm=TRUE), sd = sd(PC1, na.rm=TRUE), se = sd/sqrt(n), lo = mean - 1.96*se, hi = mean + 1.96*se)
+write.csv(group_summary, file.path(results_dir, "pca_PC1_group_summary_regen.csv"), row.names = FALSE)
+
+lm_group <- lm(PC1 ~ factor(PC1_group), data = scores_perf)
+anova_group <- anova(lm_group)
+group_r2 <- summary(lm_group)$r.squared
+write.csv(data.frame(stat = c('R2'), value = c(group_r2)), file.path(results_dir, "pca_PC1_group_r2_regen.csv"), row.names = FALSE)
+
+cohens_d <- NA_real_
+if (all(c(1,2) %in% scores_perf$PC1_group)) {
+  g1 <- scores_perf$PC1[scores_perf$PC1_group == 1]
+  g2 <- scores_perf$PC1[scores_perf$PC1_group == 2]
+  pooled_sd <- sqrt(((length(g1)-1)*var(g1, na.rm=TRUE) + (length(g2)-1)*var(g2, na.rm=TRUE)) / (length(g1)+length(g2)-2))
+  cohens_d <- (mean(g2, na.rm=TRUE) - mean(g1, na.rm=TRUE)) / pooled_sd
+}
+write.csv(data.frame(cohens_d = cohens_d), file.path(results_dir, "pca_PC1_cohens_d_top_bottom_regen.csv"), row.names = FALSE)
+
+perm_p <- NA_real_
+if (all(c(1,2) %in% scores_perf$PC1_group)) {
+  obs_diff <- mean(scores_perf$PC1[scores_perf$PC1_group==2], na.rm=TRUE) - mean(scores_perf$PC1[scores_perf$PC1_group==1], na.rm=TRUE)
+  perm_diffs <- replicate(2000, {
+    perm_group <- sample(scores_perf$PC1_group)
+    mean(scores_perf$PC1[perm_group==2], na.rm=TRUE) - mean(scores_perf$PC1[perm_group==1], na.rm=TRUE)
+  })
+  perm_p <- mean(abs(perm_diffs) >= abs(obs_diff))
+}
+write.csv(data.frame(perm_p = perm_p), file.path(results_dir, "pca_PC1_perm_p_top_bottom_regen.csv"), row.names = FALSE)
+
+boot_ci <- function(x, B = 2000) {
+  x <- x[!is.na(x)]
+  if (length(x) < 3) return(c(NA, NA))
+  sims <- replicate(B, mean(sample(x, replace = TRUE)))
+  quantile(sims, c(0.025, 0.975))
+}
+ci1 <- boot_ci(scores_perf$PC1[scores_perf$PC1_group==1])
+ci3 <- boot_ci(scores_perf$PC1[scores_perf$PC1_group==3])
+write.csv(data.frame(group = c(1,3), lo = c(ci1[1], ci3[1]), hi = c(ci1[2], ci3[2])), file.path(results_dir, "pca_PC1_bootstrap_CIs_top_bottom_regen.csv"), row.names = FALSE)
+
+if (requireNamespace('vegan', quietly = TRUE)) {
+  groups_for_adonis <- scores_perf$PC1_group[match(rownames(effect_imp), scores_perf$genotype)]
+  if (length(groups_for_adonis) == nrow(effect_imp)) {
+    ad <- vegan::adonis2(as.matrix(effect_imp) ~ groups_for_adonis, permutations = 999)
+    capture_out <- capture.output(print(ad))
+    writeLines(capture_out, con = file.path(results_dir, "pca_PC1_permanova_regen.txt"))
+  }
+}
+
+vars_to_corr <- c('shoot_wt_eff', 'florets_eff', 'p_effect', 'dse_hyphae', 'dse_in_dry_soil', 'dse_tot', 'amf_tot', 'lse', 'no_fungus')
+corr_res <- lapply(vars_to_corr, function(v) {
+  y <- scores_perf[[v]]
+  ok <- !is.na(scores$PC1) & !is.na(y[match(scores$genotype, scores_perf$genotype)])
+  x <- scores$PC1[ok]
+  yy <- y[match(scores$genotype, scores_perf$genotype)][ok]
+  if (length(x) >= 3) {
+    ct <- cor.test(x, yy)
+    data.frame(variable = v, cor = as.numeric(ct$estimate), p.value = ct$p.value, n = length(x))
+  } else data.frame(variable = v, cor = NA_real_, p.value = NA_real_, n = length(x))
+})
+corr_df <- do.call(rbind, corr_res)
+corr_df$padj <- p.adjust(corr_df$p.value, method = 'BH')
+write.csv(corr_df, file.path(results_dir, 'pca_PC1_correlations_regen.csv'), row.names = FALSE)
+
+# Append to summary txt
+sink(summary_txt, append = TRUE)
+cat('\n---- PC1 backing metrics (regenerated) ----\n')
+cat(sprintf('PC1 variance (%%): %.2f\n', pc1_var_pct))
+cat('Top loadings (top 6):\n'); print(head(top_loadings, 6))
+cat('\nGroup summary (PC1 tertiles):\n'); print(group_summary)
+cat('\nANOVA (PC1 ~ tertile):\n'); print(anova_group)
+cat('\nR-squared (PC1 ~ tertile):\n'); print(group_r2)
+cat('\nCohen\'s d (top vs bottom tertiles):\n'); print(cohens_d)
+cat('\nPermutation p (top vs bottom tertiles):\n'); print(perm_p)
+cat('\nCorrelation summary (PC1 vs variables):\n'); print(corr_df)
 sink()
 
 # Build an auto-generated markdown section (will be injected between markers)
@@ -184,6 +267,95 @@ mycorrhizal_vars <- c("amf_in_dry_soil", "rlc_p", "dse_in_dry_soil", "amf_tot",
                       "dse", "lse", "am_hyphae", "no_fungus",
                       "arb", "olpidium", "tot")
 
+# ---- Trait grouping by PC1 groups (regenerated) ----
+trait_group_k <- 2
+set.seed(42)
+if (nrow(scores) >= trait_group_k) {
+  if (trait_group_k == 1) {
+    raw_clusters <- rep(1, nrow(scores))
+    cm <- mean(scores$PC1, na.rm = TRUE)
+    clusters_ord <- raw_clusters
+    cluster_for_geno <- clusters_ord[match(rownames(effect_imp), scores$genotype)]
+  # Diagnostic logging
+  dbg_file <- file.path(results_dir, paste0('pca_trait_group_debug_k', trait_group_k, '_regen.txt'))
+  dir.create(dirname(dbg_file), showWarnings = FALSE, recursive = TRUE)
+  sink(dbg_file)
+  cat('Diagnostic for trait grouping by PC1 (regen)\n')
+  cat('trait_group_k =', trait_group_k, '\n')
+  cat('nrow(effect_imp) =', nrow(effect_imp), '\n')
+  cat('length(scores$genotype) =', length(scores$genotype), '\n')
+  cat('first 10 effect_imp rownames:\n'); print(head(rownames(effect_imp), 10))
+  cat('first 10 scores genotypes:\n'); print(head(scores$genotype, 10))
+  matched <- rownames(effect_imp) %in% scores$genotype
+  cat('matched count:', sum(matched), 'of', length(matched), '\n')
+  if (any(!matched)) { cat('unmatched (first 20):\n'); print(head(rownames(effect_imp)[!matched], 20)) }
+  cat('raw_clusters length:', length(raw_clusters), '\n')
+  cat('clusters_ord length:', length(clusters_ord), '\n')
+  cat('cluster_for_geno length:', length(cluster_for_geno), '\n')
+  cat('cluster_for_geno summary:\n'); print(summary(cluster_for_geno))
+  sink()
+  } else {
+    raw_clusters <- kmeans(scores$PC1, centers = trait_group_k)$cluster
+  cm <- tapply(scores$PC1, raw_clusters, mean)
+  ord <- order(cm)
+  remap <- setNames(seq_along(ord), names(cm)[ord])
+  clusters_ord <- remap[as.character(raw_clusters)]
+    cluster_for_geno <- clusters_ord[match(rownames(effect_imp), scores$genotype)]
+  }
+  trait_stats_list <- lapply(colnames(effect_imp), function(tr) {
+    vals <- effect_imp[[tr]]
+    # compute group means safely
+    ok_idx <- !is.na(cluster_for_geno)
+    group_means_full <- rep(NA_real_, trait_group_k)
+    names(group_means_full) <- seq_len(trait_group_k)
+    if (any(ok_idx)) {
+      mm <- tapply(vals[ok_idx], cluster_for_geno[ok_idx], mean, na.rm = TRUE)
+      if (length(mm) > 0) {
+        group_means_full[names(mm)] <- as.numeric(mm)
+      }
+    }
+    group_ns <- sapply(seq_len(trait_group_k), function(g) sum(!is.na(vals) & cluster_for_geno == g))
+    pval <- NA_real_
+    if (trait_group_k == 2 && all(group_ns >= 2, na.rm = TRUE)) {
+      g1 <- vals[cluster_for_geno == 1]
+      g2 <- vals[cluster_for_geno == 2]
+      if (sum(!is.na(g1)) >= 2 && sum(!is.na(g2)) >= 2) {
+        pval <- tryCatch(t.test(g1, g2)$p.value, error = function(e) NA_real_)
+      }
+    }
+    if (all(is.na(group_means_full))) assigned <- NA_integer_ else assigned <- as.integer(which.max(group_means_full))
+    data.frame(trait = tr, assigned_group = assigned, p.value = pval, stringsAsFactors = FALSE)
+  })
+  trait_stats <- do.call(rbind, trait_stats_list)
+  trait_stats$padj <- p.adjust(trait_stats$p.value, method = 'BH')
+  write.csv(trait_stats, file.path(results_dir, paste0('pca_trait_group_stats_PC1_k', trait_group_k, '_regen.csv')), row.names = FALSE)
+  means_mat <- t(sapply(colnames(effect_imp), function(tr) {
+    mm <- tapply(effect_imp[[tr]], cluster_for_geno, mean, na.rm = TRUE)
+    out <- rep(NA_real_, trait_group_k)
+    if (length(mm) > 0) {
+      idx <- as.integer(names(mm))
+      out[idx] <- as.numeric(mm)
+    }
+    names(out) <- paste0('group', seq_len(trait_group_k))
+    out
+  }))
+  means_df <- data.frame(trait = rownames(means_mat), means_mat, stringsAsFactors = FALSE, row.names = NULL)
+  write.csv(means_df, file.path(results_dir, paste0('pca_trait_group_means_PC1_k', trait_group_k, '_regen.csv')), row.names = FALSE)
+  long_means <- tidyr::pivot_longer(means_df, cols = starts_with('group'), names_to = 'group', values_to = 'mean')
+  p_heat <- ggplot(long_means, aes(x = group, y = trait, fill = mean)) + geom_tile() + scale_fill_gradient2(low = 'blue', mid = 'white', high = 'red', na.value = 'grey50') + labs(title = paste('Trait means by PC1 groups (k=', trait_group_k, ')', sep='')) + theme_minimal()
+  ggsave(file.path(plots_dir, paste0('pca_PC1_trait_group_means_k', trait_group_k, '_regen.png')), plot = p_heat, width = 8, height = max(6, 0.25 * nrow(means_df)), dpi = 300)
+  sink(summary_txt, append = TRUE)
+  cat('\n---- Trait grouping by PC1 (k=', trait_group_k, ') (regenerated) ----\n', sep='')
+  cat('Trait group counts:\n')
+  print(table(trait_stats$assigned_group))
+  cat('\nTop traits assigned to each group (by mean):\n')
+  for (g in seq_len(trait_group_k)) {
+    topg <- means_df %>% dplyr::arrange(dplyr::desc(.data[[paste0('group', g)]])) %>% dplyr::slice_head(n = 8) %>% dplyr::pull(trait)
+    cat('Group', g, ':', paste(topg, collapse = ', '), '\n')
+  }
+  sink()
+}
+
 # Compute genotype-level drought effect for each mycorrhizal var (Droughted - Watered)
 myco_long <- ds %>% select(genotype, treatment, intersect(mycorrhizal_vars, names(ds))) %>%
   pivot_longer(cols = -c(genotype, treatment), names_to = "variable", values_to = "value") %>%
@@ -220,7 +392,7 @@ if (nrow(myco_long) > 0) {
     for (var in cor_df$variable) {
       plot_df <- data.frame(genotype = rownames(myco_sub), effect = as.numeric(myco_sub[[var]]), PC1 = pc1_scores)
       p_plot <- ggplot(plot_df, aes(x = PC1, y = effect, label = genotype)) +
-        geom_point() + geom_smooth(method = 'lm', se = TRUE) + ggrepel::geom_text_repel(size = 3) +
+        geom_point() + geom_smooth(method = 'lm', formula = y ~ x, se = TRUE) + ggrepel::geom_text_repel(size = 3) +
         labs(title = paste('PC1 vs', var, 'effect'), x = 'PC1', y = paste(var, 'effect (Drought - Watered)')) +
         theme_minimal()
       ggsave(file.path(plots_dir, paste0('pca_myco_', var, '_vs_PC1.png')), plot = p_plot, width = 8, height = 6, dpi = 300)

@@ -5,6 +5,6 @@ Number of permutations: 999
 
 vegan::adonis2(formula = as.matrix(effect_imp) ~ groups_for_adonis, permutations = 999)
                   Df SumOfSqs      R2      F Pr(>F)
-groups_for_adonis  1  12623.7 0.93829 608.21  0.499
+groups_for_adonis  1  12623.7 0.93829 608.21  0.475
 Residual          40    830.2 0.06171              
 Total             41  13453.9 1.00000              

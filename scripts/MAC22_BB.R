@@ -284,6 +284,31 @@ p_load_colored <- p_load +
 print(p_load_colored)
 ggsave("plots/pca_trait_loadings_colored_by_sensitivity.png", plot = p_load_colored, width = 8, height = 6, dpi = 300)
 
+# Add group ellipses based on trait_group_k / cluster_for_geno (if available)
+try({
+  # ensure scores_now has genotype identifiers matching effect_imp / scores
+  if (!"genotype" %in% colnames(scores_now)) scores_now$genotype <- rownames(scores_now)
+  # attach group labels where available
+  if (exists("cluster_for_geno") && length(cluster_for_geno) == nrow(effect_imp)) {
+    gmap <- data.frame(genotype = rownames(effect_imp), group = as.factor(cluster_for_geno), stringsAsFactors = FALSE)
+    scores_now <- merge(scores_now, gmap, by = 'genotype', all.x = TRUE)
+  } else if (exists("scores") && "genotype" %in% colnames(scores)) {
+    scores_now <- merge(scores_now, scores[, c('genotype')], by.x = 'row.names', by.y = 'genotype', all.x = TRUE)
+    rownames(scores_now) <- scores_now$Row.names; scores_now$Row.names <- NULL
+    if (exists("cluster_for_geno")) scores_now$group <- as.factor(cluster_for_geno[match(rownames(scores_now), names(cluster_for_geno))])
+  }
+
+  if ("group" %in% colnames(scores_now)) {
+    # draw ellipse fill and border, slightly transparent
+    p_ell <- p_load +
+      geom_point(data = scores_now, aes(x = PC1, y = PC2, color = group), size = 2, inherit.aes = FALSE) +
+      stat_ellipse(data = scores_now, aes(x = PC1, y = PC2, fill = group, color = group), geom = 'polygon', alpha = 0.15, level = 0.68, show.legend = TRUE) +
+      scale_fill_brewer(palette = 'Set2') +
+      scale_color_brewer(palette = 'Set2')
+    ggsave("plots/pca_trait_loadings_with_group_ellipses.png", plot = p_ell, width = 8, height = 6, dpi = 300)
+  }
+}, silent = TRUE)
+
 
 # build genotype × treatment matrix (mean per cell), then PCA
 gt_mat <- filtered_long_data %>%
@@ -560,10 +585,60 @@ cat('\nPermutation p (top vs bottom tertiles):\n'); print(perm_p)
 cat('\nCorrelation summary (PC1 vs variables):\n'); print(corr_df)
 sink()
 
-# ---- Trait grouping by PC1 groups ----
-# Assign traits to groups defined on genotype PC1 scores (k = 2 by default)
-trait_group_k <- 2
-set.seed(42)
+# ---- Trait grouping by PC1 groups (automatic k selection) ----
+# Choose k automatically (2..max_k) by maximizing average silhouette width on PC1
+set.seed(1998)
+# restrict maximum tested k to 3 by default to avoid over-splitting on small datasets
+max_k <- min(3, max(2, nrow(scores) - 1))
+chosen_k <- 2
+if (nrow(scores) >= 2) {
+  possible_k <- seq(2, max_k)
+  sil_scores <- rep(NA_real_, length(possible_k))
+  if (requireNamespace('cluster', quietly = TRUE)) {
+    dmat <- dist(as.matrix(scores$PC1))
+    min_cluster_size <- 2
+    sil_log <- list()
+    for (i in seq_along(possible_k)) {
+      k <- possible_k[i]
+      km <- tryCatch(kmeans(scores$PC1, centers = k, nstart = 25), error = function(e) NULL)
+      if (is.null(km)) next
+      labs <- km$cluster
+      cluster_sizes <- as.integer(table(labs))
+      # require minimum cluster size to consider this k
+      if (any(cluster_sizes < min_cluster_size)) {
+        sil_scores[i] <- NA_real_
+        sil_log[[as.character(k)]] <- list(sil = NA_real_, sizes = cluster_sizes)
+        next
+      }
+      if (length(unique(labs)) < 2) next
+      sil <- tryCatch(cluster::silhouette(labs, dmat), error = function(e) NULL)
+      if (is.null(sil)) next
+      sil_scores[i] <- mean(sil[, 3], na.rm = TRUE)
+      sil_log[[as.character(k)]] <- list(sil = sil_scores[i], sizes = cluster_sizes)
+    }
+    # write silhouette log
+    try({
+      sink(file.path('results', 'pca_silhouette_log.txt'), append = TRUE)
+      cat('silhouette log for possible ks:\n')
+      print(sil_log)
+      sink()
+    }, silent = TRUE)
+    if (all(is.na(sil_scores))) {
+      chosen_k <- 2
+    } else {
+      chosen_k <- possible_k[which.max(sil_scores)]
+    }
+  } else {
+    # fallback when cluster not available
+    chosen_k <- 2
+  }
+} else {
+  chosen_k <- 1
+}
+# Save chosen k
+write.csv(data.frame(chosen_k = chosen_k), file = file.path('results', 'pca_chosen_k.csv'), row.names = FALSE)
+# use chosen_k for downstream grouping
+trait_group_k <- chosen_k
 if (nrow(scores) >= trait_group_k) {
   if (trait_group_k == 1) {
     # single cluster: assign all genotypes to group 1
@@ -582,6 +657,26 @@ if (nrow(scores) >= trait_group_k) {
 
   # align clusters to effect_imp genotypes
   cluster_for_geno <- clusters_ord[match(rownames(effect_imp), scores$genotype)]
+
+  # robustly compact labels so observed groups become consecutive 1..m (avoid gaps like 1 and 3)
+  # ensure cluster_for_geno is an integer vector (may contain NA)
+  cluster_for_geno <- as.integer(cluster_for_geno)
+  observed <- sort(unique(cluster_for_geno[!is.na(cluster_for_geno)]))
+  if (length(observed) == 0) {
+    # no clusters observed: mark all as NA and treat as single-group downstream
+    cluster_for_geno[] <- NA_integer_
+    trait_group_k <- 1
+  } else {
+    # build mapping from original observed labels -> consecutive 1..m
+    map_obs <- setNames(seq_along(observed), as.character(observed))
+    # map values safely, preserving NAs
+    cluster_chr <- as.character(cluster_for_geno)
+    mapped <- map_obs[cluster_chr]
+    # any entries not found in map_obs will become NA; coerce to integer
+    cluster_for_geno <- as.integer(mapped)
+    # update trait_group_k to the actual number of observed groups after mapping
+    trait_group_k <- length(observed)
+  }
 
   # Diagnostic logging: help debug why group means may be all NA
   dbg_file <- file.path('results', paste0('pca_trait_group_debug_k', trait_group_k, '.txt'))
@@ -621,11 +716,36 @@ if (nrow(scores) >= trait_group_k) {
     }
     group_ns <- sapply(seq_len(trait_group_k), function(g) sum(!is.na(vals) & cluster_for_geno == g))
     pval <- NA_real_
-    if (trait_group_k == 2 && all(group_ns >= 2, na.rm = TRUE)) {
-      g1 <- vals[cluster_for_geno == 1]
-      g2 <- vals[cluster_for_geno == 2]
-      if (sum(!is.na(g1)) >= 2 && sum(!is.na(g2)) >= 2) {
-        pval <- tryCatch(t.test(g1, g2)$p.value, error = function(e) NA_real_)
+    if (trait_group_k == 2) {
+      # two-group t-test when both groups have >=2 non-missing
+      if (all(group_ns >= 2, na.rm = TRUE)) {
+        g1 <- vals[cluster_for_geno == 1]
+        g2 <- vals[cluster_for_geno == 2]
+        if (sum(!is.na(g1)) >= 2 && sum(!is.na(g2)) >= 2) {
+          pval <- tryCatch(t.test(g1, g2)$p.value, error = function(e) NA_real_)
+        }
+      }
+    } else if (trait_group_k > 2) {
+      # For >2 groups, try ANOVA (requires at least two groups with >=2 samples); fallback to Kruskal-Wallis
+      df_tv <- data.frame(val = vals, grp = cluster_for_geno)
+      df_tv <- df_tv[!is.na(df_tv$val) & !is.na(df_tv$grp), , drop = FALSE]
+      if (nrow(df_tv) >= 3) {
+        gs <- table(df_tv$grp)
+        if (sum(gs >= 2) >= 2) {
+          # try ANOVA
+          a_mod <- tryCatch(aov(val ~ factor(grp), data = df_tv), error = function(e) NULL)
+          if (!is.null(a_mod)) {
+            an <- tryCatch(anova(a_mod), error = function(e) NULL)
+            if (!is.null(an) && nrow(an) >= 1) {
+              pval <- as.numeric(an$"Pr(>F)"[1])
+            }
+          }
+          # fallback to Kruskal-Wallis if ANOVA failed or returned NA
+          if (is.na(pval)) {
+            kw <- tryCatch(kruskal.test(val ~ factor(grp), data = df_tv), error = function(e) NULL)
+            if (!is.null(kw)) pval <- kw$p.value
+          }
+        }
       }
     }
     if (all(is.na(group_means_full))) assigned <- NA_integer_ else assigned <- as.integer(which.max(group_means_full))
@@ -671,7 +791,7 @@ if (nrow(scores) >= trait_group_k) {
 
 #Correlate mycorrhizal traits to PC1.
 
-
+stop("stop")
 
 #STOP HERE
 

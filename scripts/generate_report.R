@@ -267,9 +267,48 @@ mycorrhizal_vars <- c("amf_in_dry_soil", "rlc_p", "dse_in_dry_soil", "amf_tot",
                       "dse", "lse", "am_hyphae", "no_fungus",
                       "arb", "olpidium", "tot")
 
-# ---- Trait grouping by PC1 groups (regenerated) ----
-trait_group_k <- 2
+# ---- Trait grouping by PC1 groups (regenerated; automatic k selection) ----
 set.seed(42)
+# restrict maximum tested k to 3 by default
+max_k <- min(3, max(2, nrow(scores) - 1))
+chosen_k <- 2
+if (nrow(scores) >= 2) {
+  possible_k <- seq(2, max_k)
+  sil_scores <- rep(NA_real_, length(possible_k))
+  if (requireNamespace('cluster', quietly = TRUE)) {
+    dmat <- dist(as.matrix(scores$PC1))
+    min_cluster_size <- 2
+    sil_log <- list()
+    for (i in seq_along(possible_k)) {
+      k <- possible_k[i]
+      km <- tryCatch(kmeans(scores$PC1, centers = k, nstart = 25), error = function(e) NULL)
+      if (is.null(km)) next
+      labs <- km$cluster
+      cluster_sizes <- as.integer(table(labs))
+      if (any(cluster_sizes < min_cluster_size)) {
+        sil_scores[i] <- NA_real_
+        sil_log[[as.character(k)]] <- list(sil = NA_real_, sizes = cluster_sizes)
+        next
+      }
+      if (length(unique(labs)) < 2) next
+      sil <- tryCatch(cluster::silhouette(labs, dmat), error = function(e) NULL)
+      if (is.null(sil)) next
+      sil_scores[i] <- mean(sil[, 3], na.rm = TRUE)
+      sil_log[[as.character(k)]] <- list(sil = sil_scores[i], sizes = cluster_sizes)
+    }
+    try({
+      sink(file.path(results_dir, 'pca_silhouette_log_regen.txt'), append = TRUE)
+      cat('silhouette log for possible ks (regen):\n')
+      print(sil_log)
+      sink()
+    }, silent = TRUE)
+    if (all(is.na(sil_scores))) chosen_k <- 2 else chosen_k <- possible_k[which.max(sil_scores)]
+  } else {
+    chosen_k <- 2
+  }
+} else chosen_k <- 1
+write.csv(data.frame(chosen_k = chosen_k), file.path(results_dir, 'pca_chosen_k_regen.csv'), row.names = FALSE)
+trait_group_k <- chosen_k
 if (nrow(scores) >= trait_group_k) {
   if (trait_group_k == 1) {
     raw_clusters <- rep(1, nrow(scores))
@@ -316,11 +355,32 @@ if (nrow(scores) >= trait_group_k) {
     }
     group_ns <- sapply(seq_len(trait_group_k), function(g) sum(!is.na(vals) & cluster_for_geno == g))
     pval <- NA_real_
-    if (trait_group_k == 2 && all(group_ns >= 2, na.rm = TRUE)) {
-      g1 <- vals[cluster_for_geno == 1]
-      g2 <- vals[cluster_for_geno == 2]
-      if (sum(!is.na(g1)) >= 2 && sum(!is.na(g2)) >= 2) {
-        pval <- tryCatch(t.test(g1, g2)$p.value, error = function(e) NA_real_)
+    if (trait_group_k == 2) {
+      if (all(group_ns >= 2, na.rm = TRUE)) {
+        g1 <- vals[cluster_for_geno == 1]
+        g2 <- vals[cluster_for_geno == 2]
+        if (sum(!is.na(g1)) >= 2 && sum(!is.na(g2)) >= 2) {
+          pval <- tryCatch(t.test(g1, g2)$p.value, error = function(e) NA_real_)
+        }
+      }
+    } else if (trait_group_k > 2) {
+      df_tv <- data.frame(val = vals, grp = cluster_for_geno)
+      df_tv <- df_tv[!is.na(df_tv$val) & !is.na(df_tv$grp), , drop = FALSE]
+      if (nrow(df_tv) >= 3) {
+        gs <- table(df_tv$grp)
+        if (sum(gs >= 2) >= 2) {
+          a_mod <- tryCatch(aov(val ~ factor(grp), data = df_tv), error = function(e) NULL)
+          if (!is.null(a_mod)) {
+            an <- tryCatch(anova(a_mod), error = function(e) NULL)
+            if (!is.null(an) && nrow(an) >= 1) {
+              pval <- as.numeric(an$"Pr(>F)"[1])
+            }
+          }
+          if (is.na(pval)) {
+            kw <- tryCatch(kruskal.test(val ~ factor(grp), data = df_tv), error = function(e) NULL)
+            if (!is.null(kw)) pval <- kw$p.value
+          }
+        }
       }
     }
     if (all(is.na(group_means_full))) assigned <- NA_integer_ else assigned <- as.integer(which.max(group_means_full))

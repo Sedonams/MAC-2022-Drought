@@ -60,7 +60,7 @@ This section documents the key analysis scripts, how to run them, what they prod
 ## Quick fixes and options
 
 - Force two groups: to force two-group comparisons, add `chosen_k <- 2` after the code that computes `chosen_k` in `scripts/MAC22_BB.R`.
-- Merge tiny cluster: if one cluster is tiny, you can request an automatic merge (reassign its genotypes to the nearest cluster by PC1 distance). Contact me or open an issue and I can add that behavior.
+- Merge tiny cluster: if one cluster is tiny, you can request an automatic merge (reassign its genotypes to the nearest cluster by PC1 distance). Contact me and I can add that behavior.
 - Ellipses: the script draws ellipses using `stat_ellipse(..., geom='polygon')` at `level = 0.68` (approx. 1 SD). Change `level` to `0.95` for a 95% ellipse.
 
 ## Troubleshooting

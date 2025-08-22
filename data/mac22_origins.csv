@@ -1,0 +1,43 @@
+"genotype","common_name","taxonomy","grin_origin","line","name","origin","anthesis","use","type","photoperiod","subspecies","growth","taxa","anthesis_date_days","harvest_date_days","total_fresh_weight_kg","brix_maturity","brix_milk","dry_weight_kg","stalk_height_cm","dry_tons_per_acre","adf_dm","ndf_dm","nfc_dm","lignin_dm","pericarp_pigmentation"
+"22913","CHINESE AMBER'","S. bicolor","China","22913","CHINESE AMBER","Tsungming Island, China",80,"Forage",NA,NA,"Bicolor",NA,22913,80,120,1.575,12.9,9.35,0.305,303,9.76,NA,NA,NA,NA,NA
+"92270","IS 12748","S. bicolor","China (Beijing shi)","92270","IS 12748","Beijing Shi, China",70,"Forage",NA,NA,"Bicolor",NA,92270,70,104,0.62,13.5,9.25,0.17,195,5.44,44.73,70.4,24.97,6.52,"Brown"
+"152961","MALNAL","S. bicolor","Sudan","152961","MALNAL","Equatoria, Sudan",117.5,NA,NA,NA,"Bicolor",NA,152961,117.5,154.5,1.803,10.75,13.8,0.555,347.5,17.76,40.29,58.36,36.44,5.97,"White"
+"152966","Ayuak","S. bicolor","Sudan","152966","AYUAK","Equatoria, Sudan",105,NA,NA,NA,"Bicolor",NA,152966,105,158,1.94,10.85,14.1,0.495,369,15.84,40.4,60.57,34.49,6.88,"Yellow"
+"155149","Dhurra No. 7","S. bicolor","Yemen","155149","DHURRA NO. 7","Dhala, Yemen",NA,NA,NA,"Sensitive","Bicolor",NA,155149,NA,159,6.325,11.5,NA,0.795,475,25.44,45.05,65.26,30.97,7.15,"Yellow"
+"156203","MN 2089","S. bicolor","Malawi","156203","MN 2089","Mangochi, Malawi",NA,NA,NA,"Sensitive","Bicolor",NA,156203,NA,159,2.605,9.7,NA,0.38,372.5,12.16,39.67,58.34,36.48,5.56,"Red"
+"156487","MN 2363","S. bicolor","Tanzania","156487","MN 2363","Itigi, Tanzania",NA,NA,NA,"Sensitive","Bicolor",NA,156487,NA,158,3.098,7.9,NA,0.635,395.5,20.32,47.95,70.9,25.28,7.52,"Red"
+"157033","Ifube No. 18","S. bicolor","Kenya","157033","IFUBE NO. 18","Kenya",122,NA,NA,"Sensitive","Bicolor",NA,157033,122,158.5,2.08,13.35,10.8,0.48,304.5,15.36,42.15,61.7,32.06,5.63,"Brown"
+"176766","MN 2873","S. bicolor","Turkey","176766","MN 2873","Aksehir, Turkey",82,"Broomcorn",NA,NA,"Bicolor",NA,176766,82,112,1.133,7.2,6.7,0.3525,322.5,11.28,45.33,72.04,20.45,7.24,"Red"
+"179749","Juar","S. bicolor","India","179749","JUAR","Pipar, Jodhpur, India",71,"Forage",NA,NA,"Bicolor",NA,179749,71,116,0.583,9.05,10.05,0.16,200,5.12,43.41,66.43,25.83,6.49,"Brown"
+"181080","HONEY SORGHUM","S. bicolor","India","181080","HONEY SORGHUM","Sakrand, Pakistan",77,"Forage",NA,NA,"Bicolor",NA,181080,77,108,0.89,8.55,8.15,0.1675,234.5,5.36,43.06,72,21.23,6.48,NA
+"181083","KAMANDRI","S. bicolor","India","181083","KAMANDRI","Sakrand, Pakistan",70,"Forage",NA,NA,"Bicolor",NA,181083,70,114.5,1.025,9.65,10.15,0.1525,180,4.88,38.7,59.56,32.18,4,"Brown"
+"217691","NAGAD EL MUR","S. bicolor","Sudan","217691","NAGAD EL MUR","Wad Madani, Sudan",104,"Forage",NA,NA,"Bicolor",NA,217691,104,157,1.165,9,12.65,0.185,259,5.92,40.13,60.08,32.04,5.66,"White"
+"218112","IS 2352","S. bicolor","Pakistan","218112","IS 2352","Dera Ismail Khan, Pakistan",69,"Grain",NA,NA,"Bicolor",NA,218112,69,104,1.3,12.75,12.25,0.2925,195,9.36,32.74,51.2,44.08,5.28,"White"
+"221548","AJEBICHINKA","S. bicolor","Nigeria","221548","AJEBICHINKA","Sokoto, Nigeria",99.5,"Forage",NA,"Insensitive","Bicolor",NA,221548,99.5,146,1.913,10.9,13.25,0.305,257.5,9.76,46.54,68.8,27.74,8.6,NA
+"226096","K.50188","S. bicolor","Kenya","226096","K.50188","Kenya",81,"Forage",NA,"Insensitive","Verticilliflorum","Perennial",226096,81,122,0.68,7.85,6.45,0.17,336,5.44,52.06,84.49,9.47,6.18,"Red"
+"300117","Tabuckigrass","S. bicolor","South Africa","300117","TABUCKIGRASS","Mokopane, South Africa",NA,"Forage",NA,"Insensitive","Verticilliflorum","Either",300117,NA,NA,NA,NA,NA,NA,NA,NA,48.53,77.67,15.8,6.89,"Brown"
+"300118","294","S. bicolor","South Africa","300118","294","Tzaneen, South Africa",92.5,"Forage",NA,"Sensitive","Verticilliflorum","Either",300118,92.5,129,0.395,9.25,9.7,0.21,332,6.72,50.86,76.27,17.19,7.2,"Brown"
+"329338","IS 11096","S. bicolor","Ethiopia","329338","IS 11096","Bako, Ethiopia",106.5,"Forage",NA,"Sensitive","Bicolor",NA,329338,106.5,155,1.435,9.1,10.7,0.355,400,11.36,47.98,68.27,26.94,7.83,"Brown"
+"329435","Mashila","S. bicolor","Ethiopia","329435","MASHILA","Asmara, Ethiopia",80,"Forage",NA,NA,"Bicolor",NA,329435,80,118.5,0.71,7.95,6.2,0.1075,153.5,3.44,49.02,73.62,15.09,7.1,"Yellow"
+"330168","IS 11888","S. bicolor","Ethiopia","330168","IS 11888","Weldiya, Ethiopia",NA,"Forage",NA,"Sensitive","Bicolor",NA,330168,NA,159,4.215,9.3,NA,0.8425,303.5,26.96,40.6,53.68,34.87,5.79,NA
+"330195","IS 11913","S. bicolor","Ethiopia","330195","IS 1193","Sinkata, Ethiopia",134,"Broomcorn",NA,"Sensitive","Bicolor",NA,330195,134,159,2.333,12.3,NA,0.485,383,15.52,43.61,65.43,28.99,6.7,"Red"
+"337680","IS 12252","S. bicolor","Ethiopia","337680","IS 12252","Dengogo, Ethiopia",NA,"Forage",NA,NA,"Bicolor",NA,337680,NA,162,4.545,4.1,NA,0.425,334.5,13.6,53.28,73.5,15.88,8.61,"White"
+"453106","ETS 2306","S. bicolor","Ethiopia","453106","ETS 2306","Ethiopia",NA,NA,NA,"Sensitive","Bicolor",NA,453106,NA,162,3.17,10.2,NA,NA,470,NA,NA,NA,NA,NA,"Brown"
+"506030","Tchinlouol","S. bicolor","Togo","506030","TCHINLOUOL","Dapaong, Togo",NA,NA,NA,"Sensitive","Bicolor",NA,506030,NA,157,2.35,9.5,NA,0.4025,415,12.88,49.5,72.88,21.56,7.61,"White"
+"513898","Abokoun Wewe","S. bicolor","Benin","513898","ABOKOUN WEWE","Agbakou, Benin",NA,NA,NA,"Sensitive","Bicolor",NA,513898,NA,159,1.693,6.9,NA,0.2125,341.5,6.8,50.96,74.02,16.48,8.09,"White"
+"514456","IS 20043","S. bicolor","Senegal","514456","IS 20043","Bransan, Senegal",NA,NA,NA,"Sensitive","Bicolor",NA,514456,NA,157,2.458,7,NA,0.5025,458.5,16.08,50.49,74.16,22.87,9.19,"White"
+"527045","AMM 1051","S. bicolor","Zimbabwe","527045","AMM 1051","Wedza, Zimbabwe",76,NA,NA,NA,"Bicolor",NA,527045,76,127.5,0.9,10.15,10.35,0.1825,140.5,5.84,38.43,59.04,30.06,5.02,"Brown"
+"533792","No. 1 Gambela","S. bicolor","Unknown","533792","NO. 1 GAMBELA","Ethiopia",82,NA,NA,"Insensitive","Bicolor",NA,533792,82,134,0.275,6.9,7.6,0.0975,89.5,3.12,41.17,75.26,15.18,5.35,"Brown"
+"535793","N108","S. bicolor","USA (Nebraska)","535793","N108","Nebraska, United States",80,NA,NA,NA,"Bicolor",NA,535793,80,118.5,0.925,12.1,9.4,0.175,146,5.6,29.67,54.29,40.11,5.23,"White"
+"542718","SAN CHI SAN'","S. bicolor","China (Shaanxi Sheng)","542718","SAN CHI SAN","Shaanxi Sheng, China",68,NA,NA,"Sensitive","Bicolor",NA,542718,68,104,0.61,3.95,8.9,0.1525,140.5,4.88,46.39,73.93,18.86,6.95,"Red"
+"562732","LGV 88-1 (DWARF)'","S. bicolor","Mexico","562732","LGV 88-1 (DWARF)","Mexico",NA,NA,NA,"Sensitive","Bicolor",NA,562732,NA,156,6.013,13.2,NA,1.0575,504,33.84,39.61,61.69,34.76,6.38,NA
+"562781","IS 3869","S. bicolor","Mali","562781","IS 3869","Bomako, Mali",NA,NA,NA,"Sensitive","Bicolor",NA,562781,NA,158,3.095,8.65,NA,0.425,407.5,13.6,50,72.96,21.05,9.22,"White"
+"562997","EKPAN DZUNGI'","S. bicolor","Nigeria","562997",NA,NA,NA,NA,NA,NA,NA,NA,562997,NA,159,2.075,6.6,NA,0.3275,390.5,10.48,45.79,68.65,24.53,6.91,"Red"
+"563006","GAGAYA'","S. bicolor","Nigeria","563006","GAGAYA","Shadadi, Nigeria",NA,NA,NA,"Sensitive","Bicolor",NA,563006,NA,158,3.528,8.3,NA,0.6,433,19.2,53.14,77.32,17.89,10.59,"Yellow"
+"563329","IS 10005","S. bicolor","Ethiopia","563329","IS 10005","Debra Zeit, Ethiopia",NA,NA,NA,"Sensitive","Bicolor",NA,563329,NA,155,5.8,11.38,NA,0.895,460,28.64,42.55,63.97,33.13,6.85,NA
+"563330","IS 10013","S. bicolor","Ethiopia","563330","IS 10013","Ethiopia",NA,NA,NA,"Sensitive","Bicolor",NA,563330,NA,157.5,4.745,11.55,NA,1.225,448,39.2,46.33,67.7,28.74,8.67,"Yellow"
+"563348","IS 10162","S. bicolor","Burkina Faso","563348","IS 10162","Burkina Faso",NA,NA,NA,"Sensitive","Bicolor",NA,563348,NA,159.5,2.71,9.4,NA,0.3975,419.5,12.72,50.82,74.12,19.65,8.08,"White"
+"564163","BTx623'","S. bicolor","United States","564163","BTX623","United States",74,NA,NA,NA,"Bicolor",NA,564163,74,122,0.803,7.2,5.35,0.135,113,4.32,47.87,72.69,15.66,4.87,"White"
+"641815","EARLY FOLGER","S. bicolor","Unknown","641815","EARLY FOLGER",NA,78,NA,NA,NA,"Bicolor",NA,641815,78,112,1.278,11.9,12.85,0.255,218.5,8.16,26.82,48.26,44.43,3.09,"Brown"
+"655983","SUGAR DRIP'","S. bicolor","Unknown","655983","SUGAR DRIP",NA,86.5,NA,NA,NA,"Bicolor",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA
+"E29W1","Nested Association Mapping Population...",NA,NA,"E29W-1","Perrennial","Jeff's Nested Association Mapping Population...",NA,NA,NA,NA,NA,NA,655983,86.5,124.5,1.86,12.05,9.9,0.2725,269.5,8.72,34.68,51.22,40.84,4.37,"Brown"

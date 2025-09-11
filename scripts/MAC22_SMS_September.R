@@ -58,17 +58,18 @@ boxplot(total_biomass_by_num ~ genotype:treatment, data = ds)
 boxplot(total_biomass ~ genotype:treatment, data = ds)
 
 # Linear model for total biomass by genotype and treatment
-m <- lm(ds$total_biomass ~ ds$genotype + ds$treatment)
+m <- lm(ds$total_biomass ~ ds$treatment)
 #Type ‘m’ to look at the model coefficients.
 m
 str(m)
 plot(m$residuals ~ m$fitted.values)
 
 # another model for total biomass by number of plants 
-n <- lm(ds$total_biomass_by_num ~ ds$genotype + ds$treatment)
+n <- lm(ds$total_biomass ~ ds$genotype + ds$treatment)
 n
 str(n)
 plot(n$residuals ~ n$fitted.values)
+
 
 
 library(car)
@@ -111,6 +112,7 @@ p_cooks <- ggplot(cooks_df, aes(x = obs, y = distance)) +
 
 # Print plot
 print(p_cooks)
+
 
 # Identify influential points
 influential <- which(cooks.distance(m) > threshold)
@@ -222,6 +224,163 @@ ggpairs(numeric_vars,
     axis.text.x = element_text(angle = 45, hjust = 1),
     plot.title = element_text(face = "bold", size = 14)
   )
+
+
+
+# Load required packages
+library(xgboost)
+library(shapr)
+library(dplyr)
+
+# Prepare data
+shap_data <- ds %>%
+  select(
+    total_biomass,  # response
+    days_to_harvest,
+    num_of_plants,
+    dry_root_wt,
+    shoot_wt
+  ) %>%
+  na.omit()
+
+X <- shap_data[, setdiff(names(shap_data), "total_biomass")]
+y <- shap_data$total_biomass
+dtrain <- xgb.DMatrix(as.matrix(X), label = y)
+
+# Train model
+param <- list(objective = "reg:squarederror", max_depth = 3, eta = 0.1)
+xgb_model <- xgb.train(param, dtrain, nrounds = 50)
+
+# ---- SHAPR steps ----
+
+# 1. Create explainer object
+explainer <- setup(
+  x_train = X,
+  model = xgb_model,
+  verbose = NULL
+)
+
+# 2. Get baseline prediction
+phi0 <- mean(y)
+
+# 3. Run explanation
+shap_values <- explain(
+  x_test = X,
+  x_train = X,
+  model = xgb_model,
+  explainer = explainer,
+  approach = "empirical",   
+  phi0 = phi0   # <- key fix
+)
+
+# 4. Inspect
+head(shap_values$shapley_values)
+
+# Calculate SHAP values
+shap_values <- explain(
+  X,
+  explainer,
+  approach = "empirical",
+  n_combinations = 1000  # Adjust based on computational resources
+)
+
+# Create SHAP summary plot
+shap_long <- data.frame(
+  feature = rep(colnames(X), each = nrow(X)),
+  shap_value = unlist(shap_values$phi),
+  feature_value = unlist(lapply(X, function(x) rep(x, length(colnames(X)))))
+)
+
+# Plot SHAP summary
+ggplot(shap_long, aes(x = shap_value, y = reorder(feature, abs(shap_value)))) +
+  geom_violin(fill = "lightblue", alpha = 0.5) +
+  geom_point(aes(color = feature_value), alpha = 0.5) +
+  scale_color_viridis_c() +
+  labs(
+    title = "SHAP Values for Biomass Predictors",
+    x = "SHAP Value (impact on model output)",
+    y = "Feature",
+    color = "Feature Value"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold"),
+    axis.text = element_text(size = 10),
+    legend.position = "right"
+  )
+
+# Save plot
+ggsave("shap_summary_plot.png", width = 10, height = 6, dpi = 300)
+
+# Print feature importance summary
+importance_summary <- data.frame(
+  feature = colnames(X),
+  mean_abs_shap = colMeans(abs(shap_values$phi))
+) %>%
+  arrange(desc(mean_abs_shap))
+
+print(importance_summary)
+
+colnames(ds)
+
+ggplot(ds, aes(x = shoot_wt, y = dry_root_wt)) +
+  geom_point(size = 2, color = "deeppink") +
+  geom_smooth(method = "lm", color = "black") +
+  theme_bw()
+
+model1 <- lm(shoot_wt ~ dry_root_wt, data = ds)
+par(mfrow = c(2, 2))
+plot(model1)
+
+#install.packages("performance")   # if not already installed
+library(performance)
+#install.packages("sjPlot")
+library(sjPlot)
+check_model(model1)
+
+summary(model1)
+tab_model(model1)
+anova(model1)
+
+null_model <- lm(shoot_wt ~ 1, data = ds)
+anova(null_model, model1)
+
+g = ggplot(ds, aes(y=shoot_wt, x=dry_root_wt)) + geom_point(size=2, color="deeppink") + theme_bw()
+g= g+ geom_smooth(method="lm", color="black")
+g
+
+m=ggpredict(model = model1, terms = c("dry_root_wt")) 
+plot(m, add.data=TRUE, color="deeppink")
+
+ds$genotype <- as.factor(ds$genotype)
+ggplot(ds, aes(x = treatment, y = total_biomass, fill = treatment)) +
+  geom_boxplot() +
+  scale_fill_brewer(palette = "Accent") +
+  theme_bw()
+
+model2 <- lm(total_biomass ~ treatment, data = ds)
+summary(model2)
+tab_model(model2)
+
+colnames(ds)
+
+
+ds$shoot_weigher <- as.factor(ds$shoot_weigher)
+ggplot(ds, aes(x = shoot_weigher, y = shoot_wt, fill = shoot_weigher)) +
+  geom_boxplot() +
+  scale_fill_brewer(palette = "Accent") +
+  theme_bw()
+
+model3 <- lm(shoot_wt ~ shoot_weigher, data = ds)
+summary(model3)
+# You should not trust these p-values to determine significance instead look at the F statistic for overall model fit
+anova(model3)
+
+
+
+
+
+
 
 
 

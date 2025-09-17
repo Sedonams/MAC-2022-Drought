@@ -26,10 +26,13 @@ library(lme4)
 #Set up working directory
 getwd()
 
+C:/Users/sedon/sedonams/MAC-2022-Drought
+
+
 #Work path
 setwd("H:/MAC-2022-Drought")
 #laptop path
-#setwd("C:/Users/sedon/Downloads")
+setwd("C:/Users/sedon/sedonams/MAC-2022-Drought")
 
 #ds <- read.csv("data/MAC22_cleaned.csv") #Using the cleaned up dataset. Missing some things like dmgr. 
 ds <- read.csv("data/dmgr_cleaned.csv") #Using the cleaned up dataset. Missing some things like dmgr. 

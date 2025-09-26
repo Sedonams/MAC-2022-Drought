@@ -1962,3 +1962,93 @@ M.randslope <- lme(Z_sprout_or_transplant_to_harvest ~ Z_tot,
                    method = "REML")
 
 anova(M1.lme, M.randslope)
+
+
+m3 <- lmer((total_biomass) ~ (treatment) + (genotype) + (1 | sprout_or_transplant_to_harvest) + (1| rep) , data = ds)
+summary(m3)
+
+
+Mbea <- lmer((total_biomass) ~ (treatment) + (genotype) +  (1| rep) + (1 | sprout_or_transplant_to_harvest) + (1 | purpleness), data = ds)
+summary(Mbea) 
+
+names(ds)
+
+p <- ggplot(ds, aes(x = total_biomass, y = numeric_pt)) +
+  geom_boxplot(aes(fill = genotype), 
+               alpha = 0.1, outlier.shape = NA) +
+  geom_jitter(aes(color = genotype), 
+              width = 0.2, size = 1.8, alpha = 1) +
+  facet_grid(~treatment, scales = "free_x", space = "free_x") +  # keep treatments aligned
+  stat_n_text() +
+  #labs(y = "AMF Root Length Colonized (%)", x = "") +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    axis.title.x = element_blank(),
+    axis.text.x  = element_blank(),
+    legend.position = "top",
+    legend.title = element_blank(),
+    panel.spacing = unit(1, "lines"),   # spacing between panels
+    panel.border = element_rect(color = "black", fill = NA)  # border around each facet
+  )
+p
+
+p <- ggplot(ds, aes(x = purpleness, y = numeric_pt)) +
+  geom_point(aes(color = genotype), size = 2, alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linetype = "dashed") +
+  facet_wrap(~treatment) +
+  #labs(x = "Total Biomass", y = "Days to Harvest") +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "none",
+    legend.title = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA)
+  )
+p
+
+view(ds)
+
+
+# Option A: treat num_of_plants and sprout_or_transplant_to_harvest as random effects
+m1 <- lmer(total_biomass ~ treatment * genotype +
+             (1 | rep) +
+             (1 | num_of_plants) +
+             (1 | sprout_or_transplant_to_harvest),
+           data = ds)
+
+# Option B: treat them as covariates (fixed effects)
+m2 <- lmer(dry_root_wt ~ treatment * genotype
+             + sprout_or_transplant_to_harvest +
+             (1 | rep),
+           data = ds)
+
+# Check models
+summary(m1)
+summary(m2)
+
+# Compare fit
+anova(m1, m2)
+
+library(performance)
+
+check_model(m2)
+
+
+library(ggplot2)
+
+ggplot(ds, aes(x = sprout_or_transplant_to_harvest, y = dry_root_wt)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", color = "blue") +
+  labs(
+    x = "Days from sprout/transplant to harvest",
+    y = "Dry root weight (g)",
+    title = "Dry root weight vs. harvest age"
+  ) +
+  theme_minimal()
+  
+  ggplot(ds, aes(x = sprout_or_transplant_to_harvest, y = dry_root_wt, color = treatment)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_minimal()
+

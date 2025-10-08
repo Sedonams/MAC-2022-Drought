@@ -30,10 +30,10 @@ getwd()
 #Work path
 setwd("H:/MAC-2022-Drought")
 #laptop path
-#setwd("C:/Users/sedon/Downloads")
+setwd("C:/Users/sedon/MAC-2022-Drought-1")
 
-#ds <- read.csv("data/MAC22_cleaned.csv") #Using the cleaned up dataset. Missing some things like dmgr. 
-ds <- read.csv("data/dmgr_cleaned.csv") #Using the cleaned up dataset. Missing some things like dmgr. 
+#ds <- read.csv("data/MAC22_cleaned.csv") #Using the cleaned up dataset. 
+ds <- read.csv("data/dmgr_cleaned.csv") #Using the cleaned up dataset. 
 
 View(ds)
 
@@ -2034,7 +2034,6 @@ library(performance)
 
 check_model(m2)
 
-
 library(ggplot2)
 
 ggplot(ds, aes(x = sprout_or_transplant_to_harvest, y = dry_root_wt)) +
@@ -2052,3 +2051,178 @@ ggplot(ds, aes(x = sprout_or_transplant_to_harvest, y = dry_root_wt)) +
   geom_smooth(method = "lm", se = FALSE) +
   theme_minimal()
 
+dredge(  m2 )
+
+na.omit(ds)
+library(MuMIn)
+library(lme4)
+library(lmerTest)
+library(nlme)
+
+GGally::ggpairs(ds[, c("total_biomass", "dry_root_wt", "sprout_or_transplant_to_harvest", "num_of_plants", "rep")])
+#col test
+# Fit a simple model with all predictors for collinearity check
+col_test <- lm(dry_root_wt ~ treatment + genotype
+             + sprout_or_transplant_to_harvest, data = ds)
+
+performance::check_collinearity(col_test)
+
+
+cor(ds[, c("total_biomass", "dry_root_wt", "sprout_or_transplant_to_harvest", "num_of_plants", "rep")], use = "pairwise.complete.obs")    
+pairs(ds[, c("total_biomass", "dry_root_wt", "sprout_or_transplant_to_harvest", "num_of_plants", "rep")], upper.panel = NULL)   
+library(car)
+vif(m2)
+
+lm1 <- lm(dry_root_wt ~ treatment + genotype + sprout_or_transplant_to_harvest, data = ds)
+summary(lm1)
+
+
+# Load needed libraries
+library(nlme)
+library(performance)
+library(sjPlot)
+library(ggplot2)
+library(ggeffects)
+
+# 1️⃣ Fit GLS model (if not already done)
+gls1 <- gls(dry_root_wt ~ treatment + genotype + sprout_or_transplant_to_harvest,
+            data = ds,
+            method = "REML",
+            na.action = na.exclude)
+
+# 2️⃣ Fit LME model with replicate as random effect
+lme1 <- lme(dry_root_wt ~ treatment + genotype + sprout_or_transplant_to_harvest,
+            random = ~ 1 | rep,
+            data = ds,
+            method = "REML",
+            na.action = na.exclude)
+
+# 3️⃣ Compare GLS vs LME with ML
+gls1_ml <- update(gls1, method = "ML")
+lme1_ml <- update(lme1, method = "ML")
+anova(gls1_ml, lme1_ml)
+
+# 4️⃣ Diagnostic check
+check_model(lme1)
+
+# 5️⃣ Likelihood-ratio tests for fixed effects
+drop1(lme1_ml, test = "Chisq")
+
+# 6️⃣ Final model (simplified to genotype only, using REML)
+lme_final <- update(lme1, fixed = dry_root_wt ~ treatment + genotype + sprout_or_transplant_to_harvest,
+                    random = ~ 1 | rep,
+                    method = "REML")
+summary(lme_final)
+check_model(lme_final)
+
+# 7️⃣ Present results
+tab_model(lme_final, show.se = TRUE)
+
+
+# Get predicted values from the model
+lmer_final <- lmer(dry_root_wt ~ genotype + sprout_or_transplant_to_harvest + (1 | rep),
+                   data = ds,
+                   REML = TRUE)
+
+
+lmer_final <- na.action(lmer_final, na.exclude)
+
+pred <- ggpredict(lmer_final, terms = "sprout_or_transplant_to_harvest")
+plot(pred, show_data = TRUE) +
+  labs(x = "Sprout or Transplant to Harvest (days)",
+       y = "Dry Root Weight (g)",
+       title = "Predicted relationship between plant age and dry root weight") +
+  theme_minimal()
+
+library(MASS)
+step_model <- stepAIC(lme1_ml, direction = "backward")
+summary(step_model)
+
+library(lme4)
+library(MuMIn)
+
+# Refit with ML
+lmer_final_ml <- update(lmer_final, REML = FALSE)
+
+# Run dredge for model selection
+all_models <- dredge(lmer_final_ml)
+# View the top models
+all_models
+
+# Top 5 models by AICc
+head(all_models, 5)
+
+# Best model------------------------------------------
+best_model <- get.models(all_models, 1)[[1]]
+summary(best_model)
+
+library(nlme)
+library(MuMIn)
+
+lme_ml <- update(lme1, method = "ML")
+
+all_models <- dredge(lme_ml, na.action = na.exclude)
+all_models
+
+# Average only models within delta < 4
+avg_model <- model.avg(all_models, subset = delta < 4)
+summary(avg_model)
+
+performance(lme_final)
+
+set.seed(123)
+performance_cv(lme_final, method = "k_fold", k = 5, stack = FALSE)
+
+library(lme4)
+
+set.seed(123)
+
+
+
+
+
+# Number of folds
+k <- 5
+
+# Get unique groups and randomly assign them to folds
+groups <- unique(ds$rep)
+fold_assignments <- sample(rep(1:k, length.out = length(groups)))
+names(fold_assignments) <- groups
+
+# Data frame to store results
+cv_results <- data.frame(Fold = integer(), R2 = numeric(), RMSE = numeric())
+
+# Loop through folds
+for (fold in 1:k) {
+  
+  # Identify test and train groups
+  test_groups <- names(fold_assignments[fold_assignments == fold])
+  train_data <- ds[!ds$rep %in% test_groups, ]
+  test_data  <- ds[ds$rep %in% test_groups, ]
+  
+  # Fit the mixed model on the training data
+  model <- lmer(dry_root_wt ~ genotype + sprout_or_transplant_to_harvest + (1|rep),
+                data = train_data)
+  
+  # Predict on the test data
+  preds <- predict(model, newdata = test_data, allow.new.levels = TRUE)
+  
+  # Calculate R² and RMSE for this fold
+  ss_res <- sum((test_data$dry_root_wt - preds)^2)
+  ss_tot <- sum((test_data$dry_root_wt - mean(test_data$dry_root_wt))^2)
+  r2 <- 1 - (ss_res / ss_tot)
+  rmse <- sqrt(mean((test_data$dry_root_wt - preds)^2))
+  
+  # Store results
+  cv_results <- rbind(cv_results, data.frame(Fold = fold, R2 = r2, RMSE = rmse))
+}
+
+# Average performance across folds
+cv_summary <- data.frame(
+  Mean_R2 = mean(cv_results$R2),
+  SD_R2   = sd(cv_results$R2),
+  Mean_RMSE = mean(cv_results$RMSE),
+  SD_RMSE   = sd(cv_results$RMSE)
+)
+
+cv_results

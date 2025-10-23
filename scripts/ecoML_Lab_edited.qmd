@@ -1,0 +1,958 @@
+---
+title: "ecoML Workshop Lab"
+author: "Jeremy Forsythe"
+---
+
+## Quick Intro
+
+The lab is written in Quarto, which uses successive chunks of code to iterate through many machine learning models and compare the results. 
+
+You will start with one dataset and a goal of regression. From there you will run a sequence of models, and look at performance metrics to decide which machine learning model is best suited for the data. 
+
+You can proceed however you would like through learning the different methods, but my suggestion is to run the code line by line to understand what is happening at each step. 
+
+Lastly there is an optional section to install Tensorflow for regression and image classification.
+
+To begin, let's get the packages we dry_root_wtd.
+
+## Packages
+
+There are MANY packages that have accumulated over the years for machine learning in R. Fortunately, the developers behind CARET recognized there was a dry_root_wtd for a single package to bring them all together. CARET uses wrapper functions and some clever coding to make machine learning tasks fast and easier in the R language by using the same simple syntax for almost all of our machine learning dry_root_wtds. 
+
+
+```{r, eval=FALSE, echo=TRUE}
+
+# Only dry_root_wtd To Run This Once
+
+install.packages(c("caret",                 # Primary Machine Learning Package in R
+                   "adabag",                # For Random Forest Bagging
+                   "glmnet",                # For Generalized Linear Modeling 
+                   "neuralnet",             # For Neural Networks
+                   "e1071",                 # For Support Vector Machines
+                   "pls",                   # For Principal Component Regression
+                   "randomForest",          # For Random Forests
+                   "gbm",                   # For Gradient Boosting 
+                   "xgboost",               # For Extreme Gradient Boosting
+                   "kernlab",               # For Support Vector Machines
+                   "shapr",                 # For Visualizations
+                   "PerformanceAnalytics",  # Assessing Model Performance 
+                   "RANN",                  # Data Preprocessing (Imputation)
+                   "purrr",                 # Extended Functionality For Processing Data
+                   "tidyr",                 # Extended Functionality For Processing Data
+                   "reshape2",              # For Data Manipulation
+                   "plotmo",                # For Visualizations
+                   "naniar",                # For Visualizations
+                   "UpSetR",                # For Visualizations
+                   "GGally",                # For Visualizations
+                   "ggplot2",               # For Visualizations
+                   "rattle",                # For Visualizations
+                   "kernelshap",            # For Visualizations
+                   "shapviz",               # For Visualizations
+                   "xtable"                 # For Printing RMarkdown Tables
+                   )
+                 )
+```
+
+```{r,warning=FALSE,message=FALSE}
+############ Library Loading
+
+library(caret)
+library(ggplot2)
+library(GGally)
+library(rattle)
+library(adabag)
+library(PerformanceAnalytics)
+library(glmnet)
+library(plotmo)
+library(neuralnet)
+library(e1071)
+library(purrr)
+library(tidyr)
+library(naniar)
+library(UpSetR)
+library(RANN)
+library(pls)
+library(randomForest)
+library(gbm)
+library(kernelshap)
+library(shapviz)
+library(kernlab)
+library(xtable)
+options(xtable.comment = FALSE)
+
+set.seed(12) # Forces our random numbers to be reproducible
+```
+
+
+## Data 
+
+Our main goal for today is analyze some eddy covariance ds data. 
+
+
+```{r}
+flux<-read.csv("https://raw.githubusercontent.com/JeremyDForsythe/PersonalWebsite/master/content/teaching/MachineLearningInR/US-SB3_2023_Example.csv")
+colnames(flux)
+View(flux)
+
+#laptop path
+setwd("C:/Users/sedon/MAC-2022-Drought-1")
+ds <- read.csv("data/dmgr_cleaned.csv") #Using the cleaned up dataset. 
+
+View(ds)
+theme_set(theme_bw())
+```
+
+The data has time information (sprout_or_transplant_to_harvest), Net Ecosystem Exchange (dry_root_wt), and some of the common drivers of photosynthesis: Incoming Solar Radiation (SW_IN), Air Temperature (TA), Vapor Pressure Deficit (VPD), and Soil Moisture (SWC).
+
+First, let's tell R that sprout_or_transplant_to_harvest is date and time information:
+
+```{r}
+ds <- ds %>%
+  drop_na(dry_root_wt, sprout_or_transplant_to_harvest)
+```
+
+Next let's look at dry_root_wt (NOTE: dry_root_wt follows the atmospheric sign convention and is negative when carbon is going into the plants from the atmosphere.): 
+
+```{r}
+plot(numeric_pt~sprout_or_transplant_to_harvest, 
+     data = ds, 
+     col = 'cornflowerblue', 
+     xlab = '', 
+     ylab = "numeric_pt")
+abline(h=0, col = 'indianred', lwd = 3
+)
+```
+
+Let's look at the other variables to get to know our data.
+
+```{r}
+par(mfrow=c(2,2))
+plot(num_of_plants~sprout_or_transplant_to_harvest, 
+     data = ds, 
+     col = "plum", 
+     xlab = '', 
+     ylab = "num_of_plants"
+)
+plot(purpleness~sprout_or_transplant_to_harvest, 
+     data = ds, 
+     col = "darkorange1", 
+     xlab = '', 
+     ylab = "purpleness"
+)
+plot(total_biomass~sprout_or_transplant_to_harvest, 
+     data = ds, 
+     col = "firebrick4", 
+     xlab = '', 
+     ylab = "total_biomass"
+)
+plot(genotype~sprout_or_transplant_to_harvest, 
+     data = ds, 
+     col = "dodgerblue3", 
+     xlab = '', 
+     ylab = "genotype"
+)
+```
+
+
+```{r}
+ds %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+  facet_wrap(~ key, scales = "free") +
+  geom_histogram()
+```
+## Data Preprocessing
+
+### Dealing With NAs
+
+Eddy Covariance is a great tool for making timeseries of dses and weather variables, but occasionally something goes wrong at the sensor and the data is bad (represented as NA in our data). 
+
+We are going to do both prediction and inference with this data by analyzing the important drivers of dry_root_wt using Machine Learning and using those drivers to gap fill dry_root_wt. 
+
+```{r}
+target<-"dry_root_wt" # Could be multiple targets
+predictors<-c("num_of_plants","purpleness","sprout_or_transplant_to_harvest")
+```
+
+
+Next let's look at the data gaps in the target:
+
+```{r}
+vis_miss(ds[target], warn_large_data = FALSE)
+```
+
+Now the predictors:
+```{r}
+vis_miss(ds[predictors], warn_large_data = FALSE)
+```
+
+One of our predictors also has missing data, SWC is missing 1\%. We now have a choice to make. We can exclude those rows, or "impute" the data which is a form of gapfilling. Imputation preserves all cases by replacing missing data with an estimated value based on other available information. I wouldn't normally impute soil moisture from temperature, sunlight, and VPD but for the sake of showing you, that's what I am going to do. Be careful with this choice though, and make sure you can back it up scientifically. When in doubt, remove the rows with any NAs.
+
+```{r}
+### Impute To Gapfill NAs in Predictor Datasets with K-Nearest Neighbor Imputation
+PreImputeKNN <- preProcess(ds[predictors],method="knnImpute",k=5)
+DataImputeKNN <- predict(PreImputeKNN, ds[predictors]) # Note: Standardizes the Data
+Rescale<- as.data.frame(t(t(DataImputeKNN)*PreImputeKNN$std+PreImputeKNN$mean)) #Convert back to original scale
+Imputeds<-cbind(ds[target],Rescale)
+rm(PreImputeKNN,DataImputeKNN,Rescale)
+
+vis_miss(Imputeds, warn_large_data = FALSE)
+
+### For Model Training Remove NAs in Target
+
+Impute<-Imputeds[complete.cases(Imputeds), ]
+```
+
+### Data partitioning 
+
+In a typical machine learning problem, you have a data set and you dry_root_wtd to create a model which predicts the outcomes.
+
+You can use all the available data for training the model (that is, learning the associations between the data and the outcomes), and
+
+then you can just keep your fingers crossed and hope that your model will perform well when it will be applied to data that it has never seen before.
+
+A more realistic behavior is to reserve some of the data for testing the model. That is, you split the data into two sets: a training set and a testing set.
+
+You use the training set to train the model, and then you apply the test set to get an estimate on how well the model works on the data that were not used for training. This is called cross-validation.
+
+It is absolutely critical that the training and test sets are completely independent. Otherwise, when you test your model, your prediction accuracy will be artificially high – not because your model is good, but because there is some correlation between the training and test sets.
+
+The more data you have for training, the more hope you can have that the model will accurately capture the relationships between the inputs and the outcomes. The more data you have for testing, the more accurate is your estimate on how well your model generalizes. So splitting the data into training and test sets is not a trivial task, with a lot of research performed on it. Some strategies are:
+
+* leave-one-out cross-validation ("LOO"). Here, we maximize the training set: only one observation is used for test, and remaining observations are used for training. This is done in a loop, so each observation gets its turn to be in the test set. This procedure is common when you work with small datasets.
+* 80-20 split: 80% of the data are used for training, and 20\% for testing. Again, this is done in a loop. One strategy is to get a random sample of 20\% of the data, in a loop; at the next iteration, you can get another random sample of 20\% etc. Another strategy is to first use the first 20\%, at the next iteration you use the next 20\%, etc; this way, you can have 5 iterations to go through the whole data set. This is also called 5-fold cross-validation.
+* A general idea of k-fold cross-validation is to break up the data into k chunks and, at each iteration, use one of the chunks for testing and the rest of the data for training.
+* split-half: the data are evenly split into training and test sets. First, you use on half for training and the other for testing; second, you use the second half for training and the first half for testing. The amount of training data is relatively small, but this way is sometimes used if the stability of the model is just as important as the classification accuracy.
+
+For today's example we are going to randomly split 60% data for training and keep the rest for testing.
+
+```{r}
+partitionIndex <- createDataPartition(y=Impute$dry_root_wt,p=0.6,list=FALSE,times=1) #Create the index of 'keeps'
+training <- Impute[partitionIndex,] # Convert 'keeps' to Training
+testing  <- Impute[-partitionIndex,] # The Rest to Testing
+```
+
+Then using K-fold: Cross validation approach to skip the validation set. The procedure has a single parameter called k that refers to the number of groups that a given data sample is to be split into. For more info visit : https://scikit-learn.org/stable/modules/cross_validation.html
+
+```{r}
+fitControl <- trainControl(method="cv", number=10, allowParallel = TRUE) #in this case k=10 
+```
+
+## Begin Machine Learning 
+
+Models are quite numerous: Check http://topepo.github.io/caret/train-models-by-tag.html for all options!
+
+### Linear Regression
+
+Let's start simple with linear regression:
+
+```{r, cache=TRUE}
+model <- train(dry_root_wt~., data=training, 
+               trControl=fitControl, method="lm")
+
+# summarize results
+print(model)
+
+# Make Predictions
+prediction_train<- predict(model,training)
+prediction_test<- predict(model,testing)
+
+# Evaluate the Regression Model
+
+cor(prediction_test,testing)
+cor.test(prediction_test,testing$dry_root_wt)
+postResample(prediction_train,training$dry_root_wt) #To get RMSE
+postResample(prediction_test,testing$dry_root_wt) 
+
+Results<-data.frame(Output='dry_root_wt', Model='LinearRegression', 
+                           TrainRMSE = postResample(prediction_train,training$dry_root_wt)[[1]],
+                           TestRMSE = postResample(prediction_test,testing$dry_root_wt)[[1]],
+                           TrainR2 = postResample(prediction_train,training$dry_root_wt)[[2]],
+                           TestR2 = postResample(prediction_test,testing$dry_root_wt)[[2]])
+
+rm(model, prediction_test,prediction_train)
+```
+
+### Stepwise Linear Regression based on AIC
+
+```{r, cache=TRUE}
+model <- train(dry_root_wt~., data=training,method="lmStepAIC")
+summary(model$finalModel) # Note: The 'stars' next to the input indicate the statistical sig.  
+
+# Make Predictions
+prediction_train<- predict(model,training)
+prediction_test<- predict(model,testing)
+
+# Evaluate the Regression Model
+
+cor(prediction_test,testing)
+cor.test(prediction_test,testing$dry_root_wt)
+
+postResample(prediction_train,training$dry_root_wt) #To get RMSE
+postResample(prediction_test,testing$dry_root_wt) 
+
+Results<-rbind(Results,c("dry_root_wt", "StepWiseRegression",
+                         postResample(prediction_train,training$dry_root_wt)[[1]],
+                         postResample(prediction_test,testing$dry_root_wt)[[1]],
+                         postResample(prediction_train,training$dry_root_wt)[[2]],
+                         postResample(prediction_test,testing$dry_root_wt)[[2]]))
+
+
+rm(model, prediction_test,prediction_train)
+```
+
+### Polynomial Regression with degree of freedom=3
+
+```{r, cache=TRUE}
+model <- train(dry_root_wt~poly(num_of_plants,2)+poly(purpleness,3)+poly(sprout_or_transplant_to_harvest,3),
+               data=training, preProcess=c("center","scale"), method="lm") 
+# method = "center" subtracts the mean of the predictor's data from the data in x from the predictor values while method = "scale" divides by the standard deviation.
+summary(model$finalModel)
+
+# Make Predictions
+prediction_train<- predict(model,training)
+prediction_test<- predict(model,testing)
+
+# Evaluate the Regression Model
+
+cor(prediction_test,testing)
+cor.test(prediction_test,testing$dry_root_wt)
+
+postResample(prediction_train,training$dry_root_wt) #To get RMSE
+postResample(prediction_test,testing$dry_root_wt) 
+
+Results<-rbind(Results,c("dry_root_wt", "PolynomialRegression",
+                         postResample(prediction_train,training$dry_root_wt)[[1]],
+                         postResample(prediction_test,testing$dry_root_wt)[[1]],
+                         postResample(prediction_train,training$dry_root_wt)[[2]],
+                         postResample(prediction_test,testing$dry_root_wt)[[2]]))
+
+
+rm(model, prediction_test,prediction_train)
+```
+
+### Principal Component Regression
+
+Linear Regression using the output of a Principal Component Analysis (PCA). PCR is skillful when data has lots of highly correlated predictors.
+
+```{r, cache=TRUE}
+model <- train(dry_root_wt~.,data=training,method="pcr")
+summary(model$finalModel)
+
+# Make Predictions
+prediction_train<- predict(model,training)
+prediction_test<- predict(model,testing)
+
+# Evaluate the Regression Model
+
+cor(prediction_test,testing)
+cor.test(prediction_test,testing$dry_root_wt)
+
+postResample(prediction_train,training$dry_root_wt) #To get RMSE
+postResample(prediction_test,testing$dry_root_wt) 
+
+Results<-rbind(Results,c("dry_root_wt", "PCARegression",
+                         postResample(prediction_train,training$dry_root_wt)[[1]],
+                         postResample(prediction_test,testing$dry_root_wt)[[1]],
+                         postResample(prediction_train,training$dry_root_wt)[[2]],
+                         postResample(prediction_test,testing$dry_root_wt)[[2]]))
+
+
+rm(model, prediction_test,prediction_train)
+```
+
+### Decision Trees
+
+```{r, cache=TRUE}
+model <- train(dry_root_wt~.,data=training,method="rpart",
+                      parms = list(split = "ginni")) # ginni can be replaced by chisquare, entropy, information
+fancyRpartPlot(model$finalModel)
+
+# Make Predictions
+prediction_train<- predict(model,training)
+prediction_test<- predict(model,testing)
+
+# Evaluate
+
+cor(prediction_test,testing)
+cor.test(prediction_test,testing$dry_root_wt)
+
+postResample(prediction_train,training$dry_root_wt) #To get RMSE
+postResample(prediction_test,testing$dry_root_wt) 
+
+Results<-rbind(Results,c("dry_root_wt", "DecisionTree",
+                         postResample(prediction_train,training$dry_root_wt)[[1]],
+                         postResample(prediction_test,testing$dry_root_wt)[[1]],
+                         postResample(prediction_train,training$dry_root_wt)[[2]],
+                         postResample(prediction_test,testing$dry_root_wt)[[2]]))
+
+
+rm(model, prediction_test,prediction_train)
+```
+
+### Random Forest
+
+Use bootstrapping technique to grow multiple trees:
+
+```{r, cache=TRUE}
+model <- train(dry_root_wt~.,data=training,method="rf",trControl = fitControl) # This takes a LONG time 
+
+# Make Predictions
+prediction_train<- predict(model,training)
+prediction_test<- predict(model,testing)
+
+# Evaluate
+
+cor(prediction_test,testing)
+cor.test(prediction_test,testing$dry_root_wt)
+
+postResample(prediction_train,training$dry_root_wt) #To get RMSE
+postResample(prediction_test,testing$dry_root_wt) 
+
+Results<-rbind(Results,c("dry_root_wt", "RandomForest",
+                         postResample(prediction_train,training$dry_root_wt)[[1]],
+                         postResample(prediction_test,testing$dry_root_wt)[[1]],
+                         postResample(prediction_train,training$dry_root_wt)[[2]],
+                         postResample(prediction_test,testing$dry_root_wt)[[2]]))
+
+rm(model, prediction_test,prediction_train)
+```
+
+### Bagging (Bootstrap Aggregation)
+
+```{r, cache=TRUE}
+model <- train(dry_root_wt~.,data=training,
+                    method="treebag", #Other methods : bagFDA, ldaBag, plsBag
+                    importance=TRUE)
+
+# Make Predictions
+prediction_train<- predict(model,training)
+prediction_test<- predict(model,testing)
+
+# Evaluate
+
+postResample(prediction_train,training$dry_root_wt) #To get RMSE
+postResample(prediction_test,testing$dry_root_wt) 
+
+Results<-rbind(Results,c("dry_root_wt", "Bagging",
+                         postResample(prediction_train,training$dry_root_wt)[[1]],
+                         postResample(prediction_test,testing$dry_root_wt)[[1]],
+                         postResample(prediction_train,training$dry_root_wt)[[2]],
+                         postResample(prediction_test,testing$dry_root_wt)[[2]]))
+
+
+rm(model, prediction_test,prediction_train)
+```
+
+
+### Gradient Boosting
+
+Ensemble of shallow and weak successive trees, with each tree learning and improving on the previous.
+
+```{r, cache=TRUE}
+model<- train(dry_root_wt~.,data=training,method="gbm",verbose=FALSE)
+model$finalModel
+
+# Make Predictions
+prediction_train<- predict(model,training)
+prediction_test<- predict(model,testing)
+
+# Evaluate
+
+postResample(prediction_train,training$dry_root_wt) #To get RMSE
+postResample(prediction_test,testing$dry_root_wt) 
+
+Results<-rbind(Results,c("dry_root_wt", "Gradient Boosting",
+                         postResample(prediction_train,training$dry_root_wt)[[1]],
+                         postResample(prediction_test,testing$dry_root_wt)[[1]],
+                         postResample(prediction_train,training$dry_root_wt)[[2]],
+                         postResample(prediction_test,testing$dry_root_wt)[[2]]))
+
+
+rm(model, prediction_test,prediction_train)
+```
+
+### Neural Network
+
+```{r, cache=TRUE}
+#scale the data set
+smax <- apply(training,2,max)
+smin <- apply(training,2,min)
+trainNN <- as.data.frame(scale(training,center=smin,scale=smax-smin))
+testNN <- as.data.frame(scale(testing,center=smin,scale=smax-smin))
+
+#Fit the Neural Network using 2 hidden layers (first with 4 neurons, second with 2) using backpropagation:
+model<-neuralnet(dry_root_wt~.,trainNN,hidden=c(4,2),linear.output = T) # Takes A Minute
+plot(model)
+
+#Predict using Neural Network
+predictNN <- compute(model,trainNN)
+prediction_train <- predictNN$net.result*(smax-smin)[1]+smin[1]
+predictNN <- compute(model,testNN)
+prediction_test <- predictNN$net.result*(smax-smin)[1]+smin[1]
+
+# Evaluate
+
+postResample(prediction_train,training$dry_root_wt) #To get RMSE
+postResample(prediction_test,testing$dry_root_wt) 
+
+Results<-rbind(Results,c("dry_root_wt", "NeuralNetwork",
+                               postResample(prediction_train,training$dry_root_wt)[[1]],
+                               postResample(prediction_test,testing$dry_root_wt)[[1]],
+                               postResample(prediction_train,training$dry_root_wt)[[2]],
+                               postResample(prediction_test,testing$dry_root_wt)[[2]]))
+
+rm(model,prediction_test,prediction_train, predictNN)
+```
+
+### Support Vector Machines - Linear
+
+```{r, cache=TRUE}
+model <-train(dry_root_wt~.,training,method="svmLinear",preProc=c("center","scale"))
+
+# Make Predictions
+prediction_train<- predict(model,training)
+prediction_test<- predict(model,testing)
+
+# Evaluate
+
+postResample(prediction_train,training$dry_root_wt) #To get RMSE
+postResample(prediction_test,testing$dry_root_wt) 
+
+Results<-rbind(Results,c("dry_root_wt", "svmLinear",
+                         postResample(prediction_train,training$dry_root_wt)[[1]],
+                         postResample(prediction_test,testing$dry_root_wt)[[1]],
+                         postResample(prediction_train,training$dry_root_wt)[[2]],
+                         postResample(prediction_test,testing$dry_root_wt)[[2]]))
+
+
+rm(model, prediction_test,prediction_train)
+```
+
+### Support Vector Machines - Poly
+
+```{r, cache=TRUE}
+model <-train(dry_root_wt~.,training,method="svmPoly",preProc=c("center","scale")) #This takes a minute!
+
+# Make Predictions
+prediction_train<- predict(model,training)
+prediction_test<- predict(model,testing)
+
+# Evaluate
+
+postResample(prediction_train,training$dry_root_wt) #To get RMSE
+postResample(prediction_test,testing$dry_root_wt) 
+
+Results<-rbind(Results,c("dry_root_wt", "svmPoly",
+                         postResample(prediction_train,training$dry_root_wt)[[1]],
+                         postResample(prediction_test,testing$dry_root_wt)[[1]],
+                         postResample(prediction_train,training$dry_root_wt)[[2]],
+                         postResample(prediction_test,testing$dry_root_wt)[[2]]))
+
+
+rm(model, prediction_test,prediction_train)
+```
+
+### Support Vector Machines - Radial
+
+```{r, cache=TRUE}
+model <-train(dry_root_wt~.,training,method="svmRadial",preProc=c("center","scale")) #This takes a second 
+# Other Methods: “svmRadialCost”, “svmRadialSigma”
+
+# Make Predictions
+prediction_train<- predict(model,training)
+prediction_test<- predict(model,testing)
+
+# Evaluate
+
+postResample(prediction_train,training$dry_root_wt) #To get RMSE
+postResample(prediction_test,testing$dry_root_wt) 
+
+Results<-rbind(Results,c("dry_root_wt", "svmRadial",
+                         postResample(prediction_train,training$dry_root_wt)[[1]],
+                         postResample(prediction_test,testing$dry_root_wt)[[1]],
+                         postResample(prediction_train,training$dry_root_wt)[[2]],
+                         postResample(prediction_test,testing$dry_root_wt)[[2]]))
+
+
+rm(model, prediction_test,prediction_train)
+```
+
+### KNN
+
+```{r, cache=TRUE}
+model <- train(dry_root_wt~.,training,method="knn",preProc=c("center","scale"),tuneLength=20) #This takes a little bit.
+
+# Make Predictions
+prediction_train<- predict(model,training)
+prediction_test<- predict(model,testing)
+
+# Evaluate
+
+postResample(prediction_train,training$dry_root_wt) #To get RMSE
+postResample(prediction_test,testing$dry_root_wt) 
+
+Results<-rbind(Results,c("dry_root_wt", "KNN",
+                               postResample(prediction_train,training$dry_root_wt)[[1]],
+                               postResample(prediction_test,testing$dry_root_wt)[[1]],
+                               postResample(prediction_train,training$dry_root_wt)[[2]],
+                               postResample(prediction_test,testing$dry_root_wt)[[2]]))
+
+
+rm(model, prediction_test,prediction_train)
+```
+
+### Extreme Gradient Boosting
+
+```{r, cache=TRUE}
+model <- train(dry_root_wt~., data = training, 
+               method = "xgbTree", # or try 'xgbDART'
+               trControl = fitControl,
+               verbose = FALSE,
+               verbosity = 0)
+
+# Make Predictions
+prediction_train<- predict(model,training)
+prediction_test<- predict(model,testing)
+
+# Evaluate
+
+postResample(prediction_train,training$dry_root_wt) #To get RMSE
+postResample(prediction_test,testing$dry_root_wt) 
+
+Results<-rbind(Results,c("dry_root_wt", "xgbTree",
+                               postResample(prediction_train,training$dry_root_wt)[[1]],
+                               postResample(prediction_test,testing$dry_root_wt)[[1]],
+                               postResample(prediction_train,training$dry_root_wt)[[2]],
+                               postResample(prediction_test,testing$dry_root_wt)[[2]]))
+rm(model, prediction_test,prediction_train)
+```
+
+### Lasso & Ridge
+
+```{r, cache=TRUE}
+parameters <- c(seq(0.1, 2, by =0.1) ,  seq(2, 5, 0.5) , seq(5, 25, 1)) # Create a set of lambdas
+# lambda controls the strength of the penalty applied to the model coefficients
+# if lambda is zero, these becomes ordinary linear regression
+
+lasso<-train(dry_root_wt~.,training,
+             method = 'glmnet', 
+             tuneGrid = expand.grid(alpha = 1, lambda = parameters) ,
+             metric =  "Rsquared",
+             trControl = trainControl("cv", number = 10)
+             ) 
+
+ridge<-train(dry_root_wt~.,training,
+             method = 'glmnet', 
+             tuneGrid = expand.grid(alpha = 0, lambda = parameters) ,
+             metric =  "Rsquared",
+             trControl = trainControl("cv", number = 10)
+             ) 
+
+print(paste0('Lasso best lambda: ' , lasso$finalModel$lambdaOpt))
+
+# Make Predictions
+prediction_train<- predict(lasso,training)
+prediction_test<- predict(lasso,testing)
+
+# Evaluate
+
+postResample(prediction_train,training$dry_root_wt) #To get RMSE
+postResample(prediction_test,testing$dry_root_wt) 
+
+Results<-rbind(Results,c("dry_root_wt", "Lasso",
+                               postResample(prediction_train,training$dry_root_wt)[[1]],
+                               postResample(prediction_test,testing$dry_root_wt)[[1]],
+                               postResample(prediction_train,training$dry_root_wt)[[2]],
+                               postResample(prediction_test,testing$dry_root_wt)[[2]]))
+
+
+print(paste0('Ridge best lambda: ' , ridge$finalModel$lambdaOpt))
+
+# Make Predictions
+prediction_train<- predict(ridge,training)
+prediction_test<- predict(ridge,testing)
+
+# Evaluate
+
+postResample(prediction_train,training$dry_root_wt) #To get RMSE
+postResample(prediction_test,testing$dry_root_wt) 
+
+Results<-rbind(Results,c("dry_root_wt", "Ridge",
+                               postResample(prediction_train,training$dry_root_wt)[[1]],
+                               postResample(prediction_test,testing$dry_root_wt)[[1]],
+                               postResample(prediction_train,training$dry_root_wt)[[2]],
+                               postResample(prediction_test,testing$dry_root_wt)[[2]]))
+
+rm(lasso,ridge,prediction_train,prediction_test,parameters)
+```
+
+## Results of the Regressions
+
+Let's look at the results to see how we did. 
+
+```{r, results='asis'}
+Results$TrainRMSE<-as.numeric(Results$TrainRMSE)
+Results$TestRMSE<-as.numeric(Results$TestRMSE)
+Results$TrainR2<-as.numeric(Results$TrainR2)
+Results$TestR2<-as.numeric(Results$TestR2)
+print(xtable(Results),digits=4)
+```
+
+It might be tempting to use Random Forest, since it has the lowest testing RMSE and highest testing R^2. However, notice the exceptionally high training R^2 and low training RMSE. When going from training to testing the value drop significantly. This is a sure sign of overfitting. Try to look for the best performance values that have little fluctuation from traing to testing. The Neural Network, svmRadial, and KNN all look pretty great. Personally, I would probably pick svmRadial, but you could still make a strong argument for Random Forest. If you wanted to argue solely by best predictive ability.
+
+
+## Visualizations
+
+If we are going to use machine learning for inference then we can use SHAP plots to visualize the output. Shapley Additive Explanations is a cutting edge and interesting way to make machine learning outputs more interpretable and sheds light inside the "black box". 
+
+The goal of SHAP is to explain the prediction abilities of an instance of x by computing the contribution of each independent variable to the prediction. The SHAP explanation method computes Shapley values from coalitional game theory. The feature values of a data instance act as players in a coalition. Shapley values tell us how to fairly distribute the “payout” (= the prediction) among the features. A player can be an individual feature value, e.g. for tabular data. A player can also be a group of feature values. For example to explain an image, pixels can be grouped to superpixels and the prediction distributed among them.
+
+For more information on how this is implemended in R, see https://cran.r-project.org/web/packages/shapviz/vignettes/basic_use.html. 
+
+This process can take a pretty long, so we are going to run it on a simple dataset included in R, "Iris". Here we are going to use Sepal Length as the target variable and Petal Length, Species, Sepal Width, and Petal Width as predictors.
+
+Let's take a look at the data:
+
+```{r}
+ggpairs(data=ds,aes(colour=rep))
+```
+
+Try running this on your pick for our best model later. 
+```{r}
+fit <- train(
+  Sepal.Length ~ Petal.Length + Petal.Width + Sepal.Width, 
+  data = iris, 
+  method="svmLinear",
+  preProc=c("center","scale"),
+  trControl = trainControl(method = "none")
+)
+
+xvars <- c("Sepal.Width","Petal.Length","Petal.Width")
+s <- kernelshap(fit, iris, predict, bg_X = iris, feature_names = xvars)
+sv <- shapviz(s)
+sv_importance(sv)
+sv_importance(sv, kind = 'beeswarm')
+```
+
+## Classification Examples
+
+For our classification examples we will also use the Iris dataset built into R, but this time try to classify which species of Iris we have based on Petal Length, Petal Width, Sepal Width, and Sepal Length.
+
+Let’s do our first prediction. Let’s predict the species of irises from the 4 variables (sepal / petal width and length). First, let’s train the model:
+
+```{r}
+ind1 <- createDataPartition(y=iris$Species,p=0.6,list=FALSE,times=1)
+#list=FALSE, prevent returning result as a list
+#times=1 to create one split
+training <- iris[ind1,]
+testing  <- iris[-ind1,]
+
+train_inputs=training[,1:4]
+train_outputs=training[,5]
+model <- train(train_inputs, train_outputs, method="lda")
+predictions <- predict(model,testing)
+```
+
+Let's see how the model did. Our metrics are different for classification
+```{r}
+table(predictions) # Same Counts!
+table(testing$Species)
+
+sum(predictions==testing$Species)/length(predictions)*100 # % Accuracy
+```
+
+Wow! 100% accuracy is really good. Let's mess around and see what happens with worse performers. Let's try a Naive Bayes classifier. 
+
+```{r}
+model <- train(train_inputs, train_outputs, method="nb")
+predictions <- predict(model,testing)
+table(predictions)
+table(testing$Species)
+```
+
+Ahhhh. Looks like it incorrectly classified two versicolor as virginica. 
+
+We can visualized this output with a confusion matrix. 
+
+```{r}
+confusionMatrix(predictions,testing$Species)
+
+library(reshape2)
+cm <- confusionMatrix (predictions,testing$Species)
+cm_df <- melt(cm$table)
+ggplot(cm_df, aes(x = Prediction, y = Reference, fill = value)) +
+ geom_raster() + scale_fill_distiller(palette = "Spectral") 
+```
+
+Let's do one more because I want to show you how you can automate the process of tuning hyperparameters. Let's do a KNN classifier, but tell R to go from K=1 to K=25. The Caret train function takes care of creating the validation set and applying these value of K to classify it.
+
+### KNN Classifier 
+
+```{r}
+indT <- createDataPartition(y=iris$Species,p=0.6,list=FALSE)
+training <- iris[indT,]
+testing  <- iris[-indT,]
+
+ModFit_KNN <- train(Species~.,training,method="knn",tuneGrid = expand.grid(k = 1:25))
+
+ggplot(ModFit_KNN$results,aes(k,Accuracy))+
+  geom_point(color="blue")+
+  labs(title=paste("Optimum K is ",ModFit_KNN$bestTune),
+       y="Accuracy")
+
+predict_KNN<- predict(ModFit_KNN,newdata=testing)
+table(predict_KNN)
+confusionMatrix(testing$Species,predict_KNN)
+
+cm <- confusionMatrix (predict_KNN,testing$Species)
+cm_df <- melt(cm$table)
+ggplot(cm_df, aes(x = Prediction, y = Reference, fill = value)) +
+ geom_raster() + scale_fill_distiller(palette = "Spectral") 
+```
+
+Try out other classifiers on your own! For quadratic discriminant, method='qda'. For SVM with linear (straight line) decision boundary, you set method = 'svmLinear' (you can also specify cost, which is the amount of error you are willing to tolerate). For non-linear boundaries, you can set method to 'svmPoly', 'svmRadial', etc. – see https://rdrr.io/cran/caret/man/models.html for all the options available in train for classification or regression. 
+
+If the number of observations is less than the number of variables, linear and quadratic discriminants won’t work. The way around it is to use principal component analysis (PCA), where we approximate the data with a small orthogonal set of new variables(principal components), each capturing an important trend in the data. This way, if several variables are correlated, they end up in the same principal component. Essentially, our data are approximated ith a small set of principal components; this approximation is then fed into linear or quadratic discriminants. This method is very robust to noise.
+
+## BONUS : Image Classification
+
+To do image classification we dry_root_wtd to download a very powerful machine learning tool called Tensorflow. (https://www.tensorflow.org/about) 
+
+TensorFlow is a free and open-source software library for machine learning and artificial intelligence developed by Google. It can be used across a range of tasks but has a particular focus on training and inference of deep neural networks.
+
+Tensorflow has a lot of requirements to get up and running, so no pressure to install of this on your computer if you are low on memory or don't have a use for using this in your day to day analyses. From here on out the chunks are set to eval=FALSE so you will dry_root_wtd to run them manually. My suggestion is to carefully run these line by line. If you already have Python, some of these steps are not neccasary. Check in with me if you are unsure.
+
+```{r, eval=FALSE}
+install.packages('tensorflow') # Install The Tensorflow Package 
+# note this isn't actually the tensorflow software just an R package that makes calls to it.
+install.packages('reticulate') # Package that connects R and Python
+reticulate::install_python() # Install Python
+library(tensorflow) # Load Tensorflow R Package
+#use_python("/usr/bin/python3") Just For Linux
+install_tensorflow(extra_packages="pillow")
+install.packages("keras") # Install keras Package For Image Classification
+library(keras)
+install_keras()
+```
+
+```{r, eval=FALSE}
+library(keras)
+library(tensorflow)
+```
+
+```{r,eval=FALSE}
+options(timeout=800)
+download.file('https://raw.githubusercontent.com/JeremyDForsythe/PersonalWebsite/master/content/teaching/MachineLearningInR/Data/barnOwltoTest.jpg','barnOwltoTest.jpg')
+# Manually download the zip file into your working directory and unzip it. 
+# https://raw.githubusercontent.com/JeremyDForsythe/PersonalWebsite/master/content/teaching/MachineLearningInR/Data/birdArchive.zip
+
+path_train <- paste0(getwd(),"/birdArchive/train/")
+label_list <- list.files(path_train)
+output_n <- length(label_list)
+save(label_list, file="label_list.R")
+
+width <- 224
+height<- 224
+target_size <- c(width, height)
+rgb <- 3 #color channels
+
+
+train_data_gen <- image_data_generator(rescale = 1/255, 
+  validation_split = .2)
+
+train_images <- flow_images_from_directory(path_train,
+  train_data_gen,
+  subset = 'training',
+  target_size = target_size,
+  class_mode = "categorical",
+  shuffle=F,
+  classes = label_list,
+  batch_size=1,
+  seed = 2021)
+
+validation_images <- flow_images_from_directory(path_train,
+ train_data_gen, 
+  subset = 'validation',
+  target_size = target_size,
+  class_mode = "categorical",
+  classes = label_list,
+  batch_size=1,
+  seed = 2021)
+
+plot(as.raster(train_images[[1]][[1]][1,,,]))
+
+mod_base <- application_xception(weights = 'imagenet', 
+   include_top = FALSE, input_shape = c(width, height, 3))
+freeze_weights(mod_base) 
+
+model_function <- function(learning_rate = 0.001, 
+  dropoutrate=0.2, n_dense=1024){
+  
+  k_clear_session()
+  
+  model <- keras_model_sequential() %>%
+    mod_base %>% 
+    layer_global_average_pooling_2d() %>% 
+    layer_dense(units = n_dense) %>%
+    layer_activation("relu") %>%
+    layer_dropout(dropoutrate) %>%
+    layer_dense(units=output_n, activation="softmax")
+  
+  model %>% compile(
+    loss = "categorical_crossentropy",
+    optimizer = optimizer_adam(learning_rate = learning_rate),
+    metrics = "accuracy"
+  )
+  
+  return(model)
+  
+}
+
+model <- model_function()
+model
+
+batch_size <- 1
+epochs <- 3
+
+path_test <- paste0(getwd(),"/birdArchive/test/")
+
+test_data_gen <- image_data_generator(rescale = 1/255)
+
+test_images <- flow_images_from_directory(path_test,
+   test_data_gen,
+   target_size = target_size,
+   class_mode = "categorical",
+   classes = label_list,
+   shuffle = F,
+   batch_size=1,
+   seed = 2021)
+
+hist <- model %>% fit(
+  train_images,
+  steps_per_epoch = train_images$n %/% batch_size, 
+  epochs = epochs, 
+  validation_data = validation_images,
+  validation_steps = validation_images$n %/% batch_size,
+  verbose = 2
+)
+
+model %>% evaluate(test_images, 
+                     steps = test_images$n)
+
+####
+# Test with new image
+test_image <- image_load("barnOwltoTest.jpg",
+                         target_size = target_size)
+
+x <- image_to_array(test_image)
+x <- array_reshape(x, c(1, dim(x)))
+x <- x/255
+pred <- model %>% predict(x)
+pred <- data.frame("Bird" = label_list, "Probability" = t(pred))
+pred <- pred[order(pred$Probability, decreasing=T),][1:5,]
+pred$Probability <- paste(format(100*pred$Probability,2),"%")
+pred
+```
+

@@ -20,80 +20,125 @@ library(gridExtra)
 
 #Set up working directory
 getwd()
-
-#This is my path - change yours to whatever yours is
-setwd("C:/Users/beabo/OneDrive/Documents/NAU/Sorghum/MAC-2022-Drought")
-
+#This is my path
+setwd("H:/MAC-2022-Drought")
 
 # Read and clean the data
+dmgr <- read_xlsx("data/MAC 2022 Mother.xlsx", sheet = "DMGR Data") %>%
+  clean_names() %>% # nolint
+  rename(treatment = treat) %>%
+  rename(age = days_from_sprout_or_transplant_to_harvest) %>%
+  mutate(age = as.integer(age))
+# convert dmgr data to date safely
+date_cols <- c("seed_or_reseed_date", "sprout_date",
+               "transplant_date", "harvest_date")
+for (col in date_cols) {
+  if (col %in% names(dmgr)) {
+    # Specify the date format, e.g. "%Y-%m-%d" or "%m/%d/%Y" as needed
+    dmgr[[col]] <- as.Date(as.character(dmgr[[col]]),
+                           format = "%Y-%m-%dT%H:%M:%OSZ")
+  }
+}
 
-#Where is sample ID in dmgr?
-dmgr <- read_xlsx("data/MAC 2022 Mother for R.xlsx", sheet = "DMGR Data")%>%
-  clean_names()%>%
-  rename(treatment = treat)
+colnames(dmgr)
 
-amf <- read_xlsx("data/MAC 2022 Mother for R.xlsx", sheet = "AMF Score")%>%
-  clean_names()%>%
-  rename(treatment = treat)%>%
+# onto the amf scoring tab cleanup
+columns_to_convert <- c("am_hyphae", "arb", "dse", "vesicle", "lse",
+                        "coil", "fine_endo", "olpidium", "mold",
+                        "plasmodiophorids", "dot_line", "non_am")
+
+amf <- read_xlsx("data/MAC 2022 Mother.xlsx", sheet = "AMF Score") %>%
+  clean_names() %>%
+  rename(treatment = treat) %>%
   mutate(genotype = stringr::str_replace(as.character(genotype), "\\.0$", ""),
-  position = as.integer(position))
+         position = as.integer(position),
+         non_am = rowSums(dplyr::select(., olpidium, mold,
+                                        plasmodiophorids, dot_line),
+                          na.rm = TRUE),
+         arb = rowSums(dplyr::select(., arb, ves_and_arb),
+                       na.rm = TRUE),
+         vesicle =
+           rowSums(dplyr::select(., vesicle_or_spore, ves_and_arb),
+                   na.rm = TRUE),
+         am_hyphae =
+           rowSums(dplyr::select(., course_am_hyphae, dse_and_am),
+                   na.rm = TRUE),
+         dse = rowSums(dplyr::select(., dse, dse_and_am),
+                       na.rm = TRUE)) %>%
+  mutate(across(ends_with("_rlc"), as.numeric)) %>%  # Ensure numeric
+  mutate(across(all_of(columns_to_convert),
+                ~ if_else(!is.na(.x) & !is.na(tot),
+                          (.x / tot) * 100,
+                          NA_real_),
+                .names = "{.col}_rlc")) %>%
+  mutate(across(all_of(columns_to_convert), # Replace zero values with NA
+                ~ na_if(.x, 0))) %>%
+  mutate(across(ends_with("_rlc"), #Replace NA with 0 where tot > 0
+                ~ if_else(tot > 0 & is.na(.x), 0, .x)))
 
-mac <- read_xlsx("data/MAC 2022 Mother for R.xlsx", sheet = "MAC22 Weights")%>%
-  clean_names()%>%
-  rename(treatment = treat)%>%
-  filter(genotype != "No Tag")%>%
+
+colnames(amf)
+View(amf)
+
+#now cleaning up the main weights data
+mac <- read_xlsx("data/MAC 2022 Mother.xlsx", sheet = "MAC22 Weights") %>%
+  clean_names() %>%
+  rename(treatment = treat) %>%
+  filter(genotype != "No Tag") %>%
   mutate(rep = stringr::str_extract(sample_id, "[A-Za-z]"),
-        position = stringr::str_extract(sample_id, "[0-9]+"),
-        genotype = stringr::str_replace(as.character(genotype), "\\.0$", ""),
-        position = as.integer(position))
+         position = stringr::str_extract(sample_id, "[0-9]+"),
+         genotype = stringr::str_replace(as.character(genotype), "\\.0$", ""),
+         position = as.integer(position))
 
-emh <- read_xlsx("data/MAC 2022 Mother for R.xlsx", sheet = "EMH")%>%
-  clean_names()%>%
-  rename(sample_id = sample)%>%
+colnames(mac)
+
+
+#cleaning up the Extramatical Hyphae (emh) data
+emh <- read_xlsx("data/MAC 2022 Mother.xlsx", sheet = "EMH") %>%
+  clean_names() %>%
   mutate(genotype = stringr::str_replace(as.character(genotype), "\\.0$", ""),
-         position = as.integer(position))%>%
-  select(!geno) #Getting rid of geno column since I dont' know how it's different from the genotype column.
+         position = as.integer(position))
 
-#Why does emh have both genotype and geno.
+colnames(emh)
 
-nuts <- read_xlsx("data/MAC 2022 Mother for R.xlsx", sheet = "MAC22 Nutrients")%>%
-  clean_names()%>%
+#Leaf Tissue Nutrient Data
+nuts <- read_xlsx("data/MAC 2022 Mother.xlsx",
+                  sheet = "MAC22 Nutrients") %>%
+  clean_names() %>%
   mutate(rep = stringr::str_extract(sample_id, "[A-Za-z]"),
-        position = stringr::str_extract(sample_id, "[0-9]+"),
-        genotype = stringr::str_replace(as.character(genotype), "\\.0$", ""),
-        position = as.integer(position))
+         position = stringr::str_extract(sample_id, "[0-9]+"),
+         genotype = stringr::str_replace(as.character(genotype), "\\.0$", ""),
+         position = as.integer(position))
 
-origins <- read_xlsx("data/MAC 2022 Mother for R.xlsx", sheet = "Geno Origins")%>%
+
+#Genotype Origin data
+origins <- read_xlsx("data/MAC 2022 Mother.xlsx",
+                     sheet = "Geno Origins") %>%
   clean_names()
 
-#What is G2C, and should I include it?
-#g2c <- read_xlsx("data/G2C All Data (7).xlsx", sheet = "Weights")%>%
- # clean_names()
-#g2camf <- read_xlsx("data/G2C All Data (7).xlsx", sheet = "AMF Score")%>%
-#  clean_names()
+#Moisture probe data
+soilmoisture <- read_xlsx("data/mac22_all_probes.xlsx") %>%
+  clean_names() %>%
+  mutate(timestamps = as.POSIXct(timestamps, format = "%Y-%m-%dT%H:%M:%OSZ",
+                                 tz = "UTC"))
 
-#Same question for legacy study
-#dsLegacy <- read_xlsx("C:/Users/sms689/Downloads/Legacy Study 2024.xlsx", sheet = "LP2")
-
-#What are dsdrought and dswet? Drought probes data. Include but as separate datasets.
-#dsdrought<- read_xlsx("C:/Users/sms689/Downloads/z6-19231(z6-19231)-1736291922.xlsx", sheet = "Config 1")
-#dswet<- read_xlsx("C:/Users/sms689/Downloads/z6-19230(z6-19230)-1736199516.xlsx", sheet = "Config 1")
-
-
+colnames(soilmoisture)
+View(soilmoisture)
 
 #-----------Combining Data----
+ds <- mac  %>%
+  left_join(amf, by = c("genotype", "treatment", "rep",
+                        "position", "sample_id")) %>%
+  left_join(emh, by = c("genotype", "treatment", "rep",
+                        "position", "sample_id")) %>%
+  left_join(nuts, by = c("genotype", "treatment", "rep",
+                         "position", "sample_id")) %>%
+  mutate(across(c(florets, shoot_wt, main_shoot_wtkg, amf_in_dry_soil, tot),
+                as.numeric))
 
-ds <- mac %>%
-  left_join(amf, by = c("genotype", "treatment", "rep","position", "sample_id")) %>%
-  left_join(emh, by = c("genotype", "treatment", "rep","position", "sample_id")) %>%
-  left_join(nuts,by = c("genotype", "treatment", "rep","position", "sample_id"))%>%
-  mutate(across(c(florets, shoot_wt, main_shoot_wtkg, amf_in_dry_soil), as.numeric))
-
-sapply(ds, class)
-
-
+glimpse(ds)
 View(ds)
 
 write.csv(ds, "data/MAC22_cleaned.csv", row.names = FALSE)
 
-ds %>% group_by(genotype)%>%tally()%>%filter(n<5) #Cool.
+ds %>% group_by(genotype) %>% tally() %>% filter(n < 5) #Cool. what is this

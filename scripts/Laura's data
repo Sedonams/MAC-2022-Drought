@@ -1,0 +1,57 @@
+#install.packages(c("readr","dplyr","stringr","lme4","lmerTest","broom.mixed","emmeans","performance","ggplot2"))
+library(readr)
+library(readxl)
+library(dplyr)
+library(stringr)
+library(lme4)
+library(lmerTest)
+library(broom.mixed)
+library(emmeans)
+library(performance)
+library(ggplot2)
+
+getwd()
+
+#This is my path -
+setwd("C:/Users/sms689/Downloads")
+
+ds <- read.xl("EMF Crop Growth Fall 2024.xlsx") #Using the cleaned up dataset. 
+
+View(ds)
+
+theme_set(theme_bw())
+
+#write.csv(ds, "H:/MAC-2022-Drought/dmgr_cleaned_again.csv", row.names = F)
+
+# convert to date safely
+date_cols <- c("seed_or_reseed_date", "sprout_date", "transplant_date", "harvest_date")
+for (col in date_cols) {
+  if (col %in% names(ds)) {
+    # Specify the date format, e.g. "%Y-%m-%d" or "%m/%d/%Y" as needed
+    ds[[col]] <- as.Date(as.character(ds[[col]]), format = "%Y-%m-%dT%H:%M:%OSZ")
+  }
+}
+
+ds$sprout_or_transplant_to_harvest <- ds$sprout_or_transplant_to_harvest %>%
+  as.integer()
+
+str(ds)
+colnames(ds)
+
+dotchart(ds$total_biomass, group = factor(ds$treatment))
+boxplot(dry_root_wt ~ sprout_or_transplant_to_harvest:treatment, data = ds)
+boxplot(total_biomass_by_num ~ genotype:treatment, data = ds)
+boxplot(total_biomass ~ genotype:treatment, data = ds)
+
+# Linear model for total biomass by genotype and treatment
+m <- lm(ds$total_biomass ~ ds$sprout_or_transplant_to_harvest)
+#Type ‘m’ to look at the model coefficients.
+m
+str(m)
+plot(m$residuals ~ m$fitted.values)
+
+# another model for total biomass by number of plants 
+n <- lm(ds$total_biomass ~ ds$genotype + ds$treatment)
+n
+str(n)
+plot(n$residuals ~ n$fitted.values)

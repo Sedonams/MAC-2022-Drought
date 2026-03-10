@@ -1,3 +1,4 @@
+
 #BB
 #8/5/25
 #This script was originally written by SS. I'm adapting it for some analyses for the Sorghum symposium happening in 2 weeks.
@@ -21,442 +22,18 @@ library(scales)
 library(viridis)
 library(ggrepel)  # For smart label positioning
 library(tibble)
-library(lme4)
 
 #Set up working directory
 getwd()
 
 #Work path
-setwd("H:/MAC-2022-Drought")
+#setwd("H:/MAC-2022-Drought")
 #laptop path
-#setwd("C:/Users/sedon/Downloads")
+setwd("C:/Users/sedon/Downloads")
 
-#ds <- read.csv("data/MAC22_cleaned.csv") #Using the cleaned up dataset. Missing some things like dmgr. 
-ds <- read.csv("data/dmgr_cleaned.csv") #Using the cleaned up dataset. Missing some things like dmgr. 
-
-View(ds)
+ds <- read.csv("MAC22_cleaned.csv") #Using the cleaned up dataset. Missing some things like dmgr. 
 
 theme_set(theme_bw())
-
-#write.csv(ds, "H:/MAC-2022-Drought/dmgr_cleaned_again.csv", row.names = F)
-
-# convert to date safely
-date_cols <- c("seed_or_reseed_date", "sprout_date", "transplant_date", "harvest_date")
-for (col in date_cols) {
-  if (col %in% names(ds)) {
-    # Specify the date format, e.g. "%Y-%m-%d" or "%m/%d/%Y" as needed
-    ds[[col]] <- as.Date(as.character(ds[[col]]), format = "%Y-%m-%dT%H:%M:%OSZ")
-  }
-}
-
-ds$sprout_or_transplant_to_harvest <- ds$sprout_or_transplant_to_harvest %>%
-  as.integer()
-
-str(ds)
-colnames(ds)
-
-dotchart(ds$total_biomass, group = factor(ds$treatment))
-boxplot(dry_root_wt ~ sprout_or_transplant_to_harvest:treatment, data = ds)
-boxplot(total_biomass_by_num ~ genotype:treatment, data = ds)
-boxplot(total_biomass ~ genotype:treatment, data = ds)
-
-# Linear model for total biomass by genotype and treatment
-m <- lm(ds$total_biomass ~ ds$sprout_or_transplant_to_harvest)
-#Type ‘m’ to look at the model coefficients.
-m
-str(m)
-plot(m$residuals ~ m$fitted.values)
-
-# another model for total biomass by number of plants 
-n <- lm(ds$total_biomass ~ ds$genotype + ds$treatment)
-n
-str(n)
-plot(n$residuals ~ n$fitted.values)
-
-
-
-library(car)
-ds$treatment <- as.factor(ds$treatment)
-leveneTest(total_biomass ~ sprout_or_transplant_to_harvest, data = ds)
-plot(m) # Example: plot residuals
-plot(n) # Example: plot residuals
-shapiro.test(m$residuals) 
-shapiro.test(n$residuals)
-
-
-
-
-# Calculate Cook's distance and create dataframe with observation numbers
-cooks_df <- data.frame(
-  obs = 1:length(cooks.distance(m)),
-  distance = cooks.distance(m)
-)
-
-# Calculate threshold for influential points (commonly used is 4/n)
-threshold <- 4/nrow(ds)
-
-# Create Cook's distance plot
-p_cooks <- ggplot(cooks_df, aes(x = obs, y = distance)) +
-  geom_point(aes(color = distance > threshold), size = 3) +
-  geom_hline(yintercept = threshold, linetype = "dashed", color = "red") +
-  scale_color_manual(values = c("steelblue", "red")) +
-  labs(
-    title = "Cook's Distance Plot",
-    subtitle = "Red dashed line indicates threshold (4/n)",
-    x = "Observation Number",
-    y = "Cook's Distance"
-  ) +
-  theme_bw() +
-  theme(
-    legend.position = "none",
-    plot.title = element_text(face = "bold"),
-    panel.grid.minor = element_blank()
-  )
-
-# Print plot
-print(p_cooks)
-
-
-# Identify influential points
-influential <- which(cooks.distance(m) > threshold)
-if(length(influential) > 0) {
-  cat("\nInfluential observations (Cook's D >", round(threshold, 4), "):\n")
-  print(ds[influential, c("genotype", "treatment", "rep", "total_biomass")])
-}
-
-
-
-
-############################
-#trying somthing
-MAC22_MLM_total_biomass <- lmer(total_biomass ~ treatment * genotype + sprout_or_transplant_to_harvest +(1|num_of_plants) + (1|rep), data = ds)
-plot(residuals(MAC22_MLM_total_biomass)) # Example: plot residuals
-plot(MAC22_MLM_total_biomass)
-#
-
-
-# Filter to groups with at least 2 observations, didnt work
-ds_bartlett <- ds %>% 
-  group_by(treatment, genotype) %>% 
-  filter(n() >= 2) %>% 
-  ungroup()
-m <- bartlett.test(total_biomass ~ interaction(treatment, genotype), data = ds_bartlett)
-# Bartlett test does not return residuals or fitted values, so plotting them is not applicable.
-print(m)
-####################################
-
-hist (ds$dry_root_wt)
-hist (ds$total_biomass_by_num)
-hist (n$residuals)
-
-hist (ds$total_biomass)
-hist (m$residuals)
-
-
-#Q-Q plot for m model 
-qqnorm(m$residuals)
-#It can be helpful to see a reference diagonal. Add the line by typing
-qqline(m$residuals)
-
-# Q-Q plot for n model 
-qqnorm(n$residuals)
-qqline(n$residuals)
-
-# Shapiro-Wilk test for normality
-shapiro.test(m$residuals)
-shapiro.test(n$residuals)
-# If p-value is less than 0.05, we reject the null hypothesis that the data is normally distributed. meaning data is not normal.
-
-table(ds$total_biomass == 0)
-
-plot(ds)
-library(car)
-
-# Check for multicollinearity using Variance Inflation Factor (VIF)
-m <- lm(data=ds, total_biomass ~ treatment + genotype + num_of_plants + sprout_or_transplant_to_harvest )
-vif(m)
-
-plot(data=ds, sprout_or_transplant_to_harvest~total_biomass)
-M.loess <- lm(sprout_or_transplant_to_harvest~total_biomass, data = ds)
-Fit <- fitted(M.loess)
-head(Fit)
-lines(x = ds$total_biomass, y = Fit)
-
-#plot(ds) not working
-colnames(ds)
-
-colnames(ds)
-
-coplot(total_biomass ~ num_of_plants | treatment,
-       data = ds,
-       panel = function(x, y, ...) {
-         tmp <- lm(y ~ x, na.action = na.omit)
-         abline(tmp)
-         points(x, y) })
-
-#Check for autocorrelation in residuals if data are time-ordered
-acf(m$residuals, main = "ACF of Model Residuals")
-
-colnames(ds)
-
-ggplot(ds, aes(x = shoot_wt, y = dry_root_wt)) +
-  geom_point(size = 2, color = "deeppink") +
-  geom_smooth(method = "lm", color = "black") +
-  theme_bw()
-
-model1 <- lm(shoot_wt ~ dry_root_wt, data = ds)
-par(mfrow = c(2, 2))
-plot(model1)
-
-#install.packages("performance")   # if not already installed
-library(performance)
-#install.packages("sjPlot")
-library(sjPlot)
-check_model(model1)
-
-summary(model1)
-tab_model(model1)
-anova(model1)
-
-null_model <- lm(shoot_wt ~ 1, data = ds)
-anova(null_model, model1)
-
-g = ggplot(ds, aes(y=shoot_wt, x=dry_root_wt)) + geom_point(size=2, color="deeppink") + theme_bw()
-g= g+ geom_smooth(method="lm", color="black")
-g
-
-m=ggpredict(model = model1, terms = c("dry_root_wt")) 
-plot(m, add.data=TRUE, color="deeppink")
-
-ds$genotype <- as.factor(ds$genotype)
-ggplot(ds, aes(x = treatment, y = total_biomass, fill = treatment)) +
-  geom_boxplot() +
-  scale_fill_brewer(palette = "Accent") +
-  theme_bw()
-
-model2 <- lm(total_biomass ~ treatment, data = ds)
-summary(model2)
-tab_model(model2)
-
-colnames(ds)
-
-
-ds$shoot_weigher <- as.factor(ds$shoot_weigher)
-ggplot(ds, aes(x = shoot_weigher, y = shoot_wt, fill = shoot_weigher)) +
-  geom_boxplot() +
-  scale_fill_brewer(palette = "Accent") +
-  theme_bw()
-
-ds$root_weigher <- as.factor(ds$root_weigher)
-ggplot(ds, aes(x = root_weigher, y = dry_root_wt, fill = root_weigher)) +
-  geom_boxplot() +
-  scale_fill_brewer(palette = "Accent") +
-  theme_bw()
-
-model3 <- lm(shoot_wt ~ shoot_weigher, data = ds)
-summary(model3)
-# You should not trust these p-values to determine significance instead look at the F statistic for overall model fit
-anova(model3)
-
-
-
-model4 <- lm(total_biomass ~ sprout_or_transplant_to_harvest * treatment, data = ds)
-summary(model4)
-anova(model4)
-# Type III ANOVA to assess main effects while accounting for interaction
-Anova(model4, type = 3)
-plot_model(model4, type = "pred", terms = c("sprout_or_transplant_to_harvest", "treatment"))
-
-library(emmeans)
-# Estimate slope for each sex group and test if slopes differ
-slope_tests <- emtrends(model4, ~ treatment, var = "sprout_or_transplant_to_harvest")
-
-# Compare slopes between sexes (test interaction)
-pairs(slope_tests)
-test(slope_tests)
-
-model5 <- lm(total_biomass ~ treatment + genotype + num_of_plants + sprout_or_transplant_to_harvest, data = ds)
-summary(model5)
-Anova(model5, type=2)
-
-#ggeffects not working
-# Clean plot with confidence ribbon
-ggplot(pred, aes(x = x, y = predicted)) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), fill = "grey80", alpha = 0.5) +
-  geom_line(color = "black", size = 1.2) +
-  geom_point(data = spar, aes(x = Wing, y = Weight), color = "deeppink", alpha = 0.4, size = 2) +
-  labs(x = "Wing Length (mm)", y = "Predicted Weight (g)",
-       title = "Model-Predicted Weight by Wing Length\n(Controlling for Tarsus and Head Length)") +
-  theme_bw(base_size = 14)
-
-
-
-ds1 <- ds %>% mutate(across(c(sprout_or_transplant_to_harvest, num_of_plants), list(s = scale)))
-model7 <- lm(total_biomass ~ sprout_or_transplant_to_harvest_s + num_of_plants_s, data = ds1)
-summary(model7)
-car::vif(model7)
-
-
-
-
-
-
-
-
-
-# Visualize pairwise relationships between key numeric variables
-
-
-
-# Pairwise relationships between key numeric variables
-numeric_vars <- ds %>%
-  dplyr::select(dry_root_wt, shoot_wt, total_biomass, 
-  sprout_or_transplant_to_harvest, num_of_plants) %>%
-  # Remove any rows with all NA values
-  filter(rowSums(!is.na(.)) > 0)
-
-# Create enhanced pairs plot with modified settings
-p <- ggpairs(numeric_vars,
-        lower = list(continuous = wrap("points", alpha = 0.3)),
-        diag = list(continuous = wrap("barDiag", bins = 30)),
-        upper = list(continuous = wrap("cor", size = 3)),
-        title = "Relationships Between Key Variables") +
-  theme_bw() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(face = "bold", size = 14),
-    strip.text = element_text(size = 8)
-  )
-
-# Display plot
-print(p)
-
-# Save high-resolution version of the plot 
-ggsave("C:/Users/sms689/Downloads/enhanced_pairs_plot.png", plot = p, width = 10, height = 10, dpi = 300)
-
-
-######################################################
-
-#----SHAP values for biomass predictors----
-
-# Load required packages
-library(xgboost)
-library(shapr)
-library(dplyr)
-
-# Prepare data
-  shap_data <- ds %>%
-    select(
-    total_biomass,  # response
-    days_to_harvest,
-    num_of_plants,
-    dry_root_wt,
-    shoot_wt
-  ) %>%
-  na.omit()
-
-X <- shap_data[, setdiff(names(shap_data), "total_biomass")]
-y <- shap_data$total_biomass
-dtrain <- xgb.DMatrix(as.matrix(X), label = y)
-
-# Train model
-param <- list(objective = "reg:squarederror", max_depth = 3, eta = 0.1)
-xgb_model <- xgb.train(param, dtrain, nrounds = 50)
-
-# ---- SHAPR steps ----
-
-# 1. Create explainer object
-explainer <- setup(
-  x_train = X,
-  model = xgb_model,
-  verbose = NULL
-)
-
-# 2. Get baseline prediction
-phi0 <- mean(y)
-
-# 3. Run explanation
-shap_values <- explain(
-  x_test = X,
-  x_train = X,
-  model = xgb_model,
-  explainer = explainer,
-  approach = "empirical",   
-  phi0 = phi0   # <- key fix
-)
-
-# 4. Inspect
-head(shap_values$shapley_values)
-
-# Calculate SHAP values
-shap_values <- explain(
-  X,
-  explainer,
-  approach = "empirical",
-  n_combinations = 1000  # Adjust based on computational resources
-)
-
-# Create SHAP summary plot
-shap_long <- data.frame(
-  feature = rep(colnames(X), each = nrow(X)),
-  shap_value = unlist(shap_values$phi),
-  feature_value = unlist(lapply(X, function(x) rep(x, length(colnames(X)))))
-)
-
-# Plot SHAP summary
-ggplot(shap_long, aes(x = shap_value, y = reorder(feature, abs(shap_value)))) +
-  geom_violin(fill = "lightblue", alpha = 0.5) +
-  geom_point(aes(color = feature_value), alpha = 0.5) +
-  scale_color_viridis_c() +
-  labs(
-    title = "SHAP Values for Biomass Predictors",
-    x = "SHAP Value (impact on model output)",
-    y = "Feature",
-    color = "Feature Value"
-  ) +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(face = "bold"),
-    axis.text = element_text(size = 10),
-    legend.position = "right"
-  )
-
-# Save plot
-ggsave("shap_summary_plot.png", width = 10, height = 6, dpi = 300)
-
-# Print feature importance summary
-importance_summary <- data.frame(
-  feature = colnames(X),
-  mean_abs_shap = colMeans(abs(shap_values$phi))
-) %>%
-  arrange(desc(mean_abs_shap))
-
-print(importance_summary)
-
-
-
-
-####################################################
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #------Making RLC's for the colonization data----
 
@@ -470,7 +47,8 @@ ds <- ds %>%
 sum(ds$arb_ves_and_arb != 0, na.rm = TRUE)
 sum(ds$arb != 0, na.rm = TRUE)
 
-columns_to_convert <- c("am_hyphae_dse_and_am","arb_ves_and_arb", "dse_dse_and_am", "vesicle_or_spore_ves_and_arb", "lse", "coil","fine_endo")
+columns_to_convert <- c("am_hyphae_dse_and_am","arb_ves_and_arb", "dse_dse_and_am", "vesicle_or_spore_ves_and_arb", "lse", "coil",
+"olpidium",	"mold", "plasmodiophorids",	"dot_line",	"non_am",	"fine_endo")
 
 ds <- ds %>%
   mutate(across(all_of(columns_to_convert), 
@@ -757,7 +335,7 @@ p <- ggplot(heatmap_df, aes(x = variable_pretty, y = genotype, fill = effect)) +
     y = "Genotype",
     title = "Drought Response Across Genotypes",
     subtitle = "Standardized differences between drought and watered treatments",
-    caption = "Significance: *** p ≤ 0.001, ** p ≤ 0.01, * p ≤ 0.05"
+    caption = "Significance: *** p ≤ 0.001, ** p ≤ 0.01, * p ≤ 0.05\nOnly genotypes with ≥3 replicates per treatment shown"
   ) +
   theme_minimal() +
   theme(
@@ -767,7 +345,7 @@ p <- ggplot(heatmap_df, aes(x = variable_pretty, y = genotype, fill = effect)) +
     plot.caption = element_text(size = 9, color = "gray50", hjust = 0),
     
     # Axis styling
-    axis.text.x.top = element_text(angle = 15, hjust = .2, vjust = 0, size = 10, face = "bold"),
+    axis.text.x.top = element_text(angle = 45, hjust = 0, vjust = 0, size = 10, face = "bold"),
     axis.text.y = element_text(size = 10, face = "bold"),
     axis.title.y = element_text(size = 12, face = "bold", margin = margin(r = 10)),
     
@@ -789,7 +367,7 @@ p <- ggplot(heatmap_df, aes(x = variable_pretty, y = genotype, fill = effect)) +
     panel.background = element_rect(fill = "white", color = NA)
   )
 
-p
+print(p)
 
 # Optional: Save high-quality version
 ggsave("drought_response_heatmap.png", plot = p, width = 14, height = 8, dpi = 300, bg = "white")
@@ -1054,21 +632,12 @@ loadings_with_strength <- loadings_df %>%
     )
   )
 
-genotypes_to_plot <- c("156203", "157033", "181080", "181083", "641815", "E29W1")
-
-pca_df_filtered <- pca_df %>%
-  filter(genotype %in% genotypes_to_plot)
-
-# Compute ellipse label positions (center of each treatment group)
-ellipse_labels <- pca_df_filtered %>%
-  group_by(treatment) %>%
-  summarise(PC1 = mean(PC1), PC2 = mean(PC2), .groups = "drop")
-
-
-p1_selective <- ggplot(pca_df_filtered, aes(x = PC1, y = PC2)) +
+#code for the plot
+p1_selective <- ggplot(pca_df, aes(x = PC1, y = PC2)) +
   stat_ellipse(aes(color = treatment), 
                alpha = 0.3, type = "norm", level = 0.68, linewidth = 1) +
-  geom_point(aes(color = genotype, shape = treatment), size = 3, alpha = 0.8)+
+  geom_point(aes(color = treatment, shape = treatment), size = 1.5, alpha = 0.8) +
+  # Arrows with variable thickness based on loading strength
   geom_segment(data = loadings_with_strength,
                aes(x = 0, y = 0, xend = PC1_scaled, yend = PC2_scaled,
                    linewidth = arrow_thickness, alpha = arrow_alpha),
@@ -1100,17 +669,15 @@ p1_selective <- ggplot(pca_df_filtered, aes(x = PC1, y = PC2)) +
                   point.padding = 0.2,
                   force = 1.5,
                   max.overlaps = Inf) +
-                  scale_color_discrete(name = "Genotype") +
-                  #scale_color_manual(values = c(
-                   # "Droughted" = "#D73027",
-                  #  "Watered" = "darkblue" ))
-                  scale_shape_manual(values = c("Droughted" = 17, "Watered" = 16),
-                   name = "Treatment") +
+  scale_color_manual(values = c("Droughted" = "#D73027", "Watered" = "#1A9850"),
+                     name = "Treatment") +
+  scale_shape_manual(values = c("Droughted" = 17, "Watered" = 16),
+                     name = "Treatment") +
   labs(
     x = paste0("PC1 (", pc1_var, "% variance)"),
     y = paste0("PC2 (", pc2_var, "% variance)"),
-    title = "Principal Component Analysis Treatment X Genotype (Preliminary AMF Colonization Genotypes)",
-    subtitle = "Plant performance, chemistry, and fungal colonization traits",
+    title = "Principal Component Analysis (Treatment X Genotype)",
+    subtitle = "Plant performance and leaf chemistry",
     caption = "Arrow thickness indicates loading strength"
   ) +
   theme_minimal() +
@@ -1127,7 +694,7 @@ p1_selective <- ggplot(pca_df_filtered, aes(x = PC1, y = PC2)) +
     plot.caption = element_text(size = 9, color = "gray50")
   )
 
-# Display the selective approach with variable arrow thickness
+# creat plot
 print(p1_selective)
 
 # Print loading strength summary for reference
@@ -1162,7 +729,7 @@ p2 <- ggplot(scree_data, aes(x = PC, y = Variance)) +
     axis.title = element_text(size = 11, face = "bold"),
     axis.text = element_text(size = 9),
     panel.grid.major.x = element_blank(),
-    panel.grid.minor.x = element_blank(),
+    panel.grid.minor = element_blank(),
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8)
   )
 
@@ -1438,8 +1005,11 @@ p1_selective <- ggplot(pca_df_filtered, aes(x = PC1, y = PC2)) +
     plot.caption = element_text(size = 9, color = "gray50")
   )
 
+
 # Display the selective approach with variable arrow thickness
 print(p1_selective)
+
+
 
 # Print loading strength summary for reference
 cat("\nLoading strength summary:\n")
@@ -1473,7 +1043,7 @@ p2 <- ggplot(scree_data, aes(x = PC, y = Variance)) +
     axis.title = element_text(size = 11, face = "bold"),
     axis.text = element_text(size = 9),
     panel.grid.major.x = element_blank(),
-    panel.grid.minor.x = element_blank(),
+    panel.grid.minor = element_blank(),
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8)
   )
 
@@ -1492,6 +1062,183 @@ cat(paste("Cumulative variance (PC1+PC2):", round(pc1_var + pc2_var, 1), "%\n"))
 # Optional: Save plots
 ggsave("pca_biplot.png", plot = p1_selective, width = 12, height = 8, dpi = 300, bg = "white")
 ggsave("pca_scree.png", plot = p2, width = 8, height = 6, dpi = 300, bg = "white")
+
+genotypes_to_plot <- c("156203", "157033", "181080", "181083", "641815", "E29W1")
+
+pca_df_filtered <- pca_df %>%
+  filter(genotype %in% genotypes_to_plot)
+
+# Compute ellipse label positions (center of each treatment group)
+ellipse_labels <- pca_df_filtered %>%
+  group_by(treatment) %>%
+  summarise(PC1 = mean(PC1), PC2 = mean(PC2), .groups = "drop")
+
+
+
+# STEP 1: Diagnose missing data (run this first)
+missing_check <- pca_df %>%
+  filter(genotype %in% genotypes_to_plot) %>%
+  group_by(genotype, treatment) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = treatment, values_from = count, values_fill = 0) %>%
+  mutate(missing_drought = ifelse(Droughted == 0, "Missing", "Present"))
+
+print("Missing data check:")
+print(missing_check)
+
+# STEP 2: Find complete genotypes
+complete_genotypes <- pca_df %>%
+  group_by(genotype) %>%
+  summarise(
+    treatments = n_distinct(treatment),
+    has_both = treatments == 2,
+    .groups = "drop"
+  ) %>%
+  filter(has_both) %>%
+  pull(genotype)
+
+print(paste("Complete genotypes:", paste(complete_genotypes, collapse = ", ")))
+
+# STEP 3: Create dataset - using all available data as requested
+pca_df_all_available <- pca_df %>%
+  filter(genotype %in% genotypes_to_plot)
+
+# Use all available data (including incomplete genotypes)
+pca_df_plot <- pca_df_all_available
+
+# Create complete data subset for ellipses (for statistical validity)
+pca_df_complete <- pca_df %>%
+  filter(genotype %in% complete_genotypes)
+
+# STEP 4: Create comprehensive plot using ALL AVAILABLE data
+p1_enhanced <- ggplot(pca_df_plot, aes(x = PC1, y = PC2)) +
+  
+  # Treatment ellipses based on COMPLETE data only (for statistical validity)
+  stat_ellipse(data = pca_df_complete, aes(fill = treatment), 
+               alpha = 0.2, type = "norm", level = 0.68, 
+               linewidth = 1, color = "transparent") +
+  stat_ellipse(data = pca_df_complete, aes(color = treatment), 
+               alpha = 0.8, type = "norm", level = 0.68, 
+               linewidth = 1, fill = "transparent") +
+  
+  # Manual colors for treatment ellipses
+  scale_fill_manual(values = c("Droughted" = "#CC4979", "Watered" = "#40B0A6"), name = "Treatment") +
+  scale_color_manual(values = c("Droughted" = "#CC4979", "Watered" = "#40B0A6"), name = "Treatment") +
+  
+  # Add a new color scale for genotype points
+  ggnewscale::new_scale_color() +
+  
+  # Points for ALL available data (including incomplete genotypes)
+  geom_point(aes(color = genotype, shape = treatment), size = 3.5, alpha = 0.9, stroke = 0.8) +
+  
+  # Highlight incomplete genotypes with white centers and thicker borders
+  geom_point(data = pca_df_plot %>% filter(!genotype %in% complete_genotypes),
+             aes(color = genotype, shape = treatment), 
+             size = .25, alpha = 0.2, stroke = .25, fill = "white") +
+  
+  # Custom colors for genotypes (you can adjust these)
+  scale_color_manual(
+    name = "Genotype",
+    values = c(
+      "156203" = "#CC79A7",   
+      "157033" = "#E69F00",    # Orange  
+      "181080" = "#009E73",    # Green
+      "181083" = "#0072B2",    # Blue
+      "641815" = "#994F00",   
+      "E29W1" = "#F0E442"      # Pink
+    )
+  ) +
+  
+  # Shape scale for treatments
+  scale_shape_manual(values = c("Droughted" = 17, "Watered" = 16), name = "Treatment") +
+  
+  # Loading arrows with variable thickness
+  geom_segment(data = loadings_with_strength,
+               aes(x = 0, y = 0, xend = PC1_scaled, yend = PC2_scaled,
+                   linewidth = arrow_thickness, alpha = arrow_alpha),
+               arrow = arrow(length = unit(0.25, "cm")),
+               color = "gray30", inherit.aes = FALSE) +
+  
+  scale_linewidth_identity() +
+  scale_alpha_identity() +
+  
+  # ALL loading labels - strong ones in bold
+  geom_text_repel(data = loadings_with_strength %>% filter(loading_strength > 0.5),
+                  aes(x = PC1_scaled * 1.15, y = PC2_scaled * 1.15, label = Variable_pretty),
+                  size = 3.8, color = "black", fontface = "bold",
+                  box.padding = 0.8, point.padding = 0.4, force = 4,
+                  inherit.aes = FALSE) +
+  
+  # Medium strength loadings in regular font
+  geom_text_repel(data = loadings_with_strength %>% 
+                    filter(loading_strength <= 0.5 & loading_strength > 0.3),
+                  aes(x = PC1_scaled * 1.1, y = PC2_scaled * 1.1, 
+                      label = Variable_pretty),
+                  size = 3.2, color = "gray20", fontface = "plain",
+                  box.padding = 0.5, point.padding = 0.3, force = 2,
+                  max.overlaps = Inf, inherit.aes = FALSE) +
+  
+  # Weaker loadings in smaller, lighter font
+  geom_text_repel(data = loadings_with_strength %>% 
+                    filter(loading_strength <= 0.3),
+                  aes(x = PC1_scaled * 1.05, y = PC2_scaled * 1.05, 
+                      label = Variable_pretty),
+                  size = 2.5, color = "gray40", fontface = "plain",
+                  box.padding = 0.3, point.padding = 0.2, force = 1,
+                  max.overlaps = Inf, inherit.aes = FALSE) +
+  
+  # Labels and styling
+  labs(
+    x = paste0("PC1 (", pc1_var, "% variance)"),
+    y = paste0("PC2 (", pc2_var, "% variance)"),
+    title = "Treatment × Genotype PCA - Preliminary Colonization Genotypes",
+    subtitle = "Ellipses = complete genotypes only, 5 reps",
+    caption = "Arrow thickness = loading strength | Red ellipse = Droughted, Blue = Watered"
+  ) +
+  
+  # Clean theme
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray40"),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text = element_text(size = 10),
+    legend.title = element_text(size = 11, face = "bold"),
+    legend.text = element_text(size = 9),
+    legend.key.size = unit(0.8, "cm"),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
+    plot.background = element_rect(fill = "white", color = NA),
+    plot.caption = element_text(size = 9, color = "gray50", hjust = 0),
+    legend.box = "horizontal",
+    legend.position = "bottom"
+  ) +
+  
+  # Arrange legends side by side
+  guides(
+    fill = guide_legend(title = "Treatment", override.aes = list(alpha = 0.7, size = 4)),
+    color = guide_legend(title = "Genotype", override.aes = list(size = 4, alpha = 1)),
+    shape = guide_legend(title = "Treatment", override.aes = list(size = 4))
+  )
+
+
+# Display the enhanced plot
+print(p1_enhanced)
+
+# Optional: Save the plot
+ggsave("enhanced_pca_plot.png", plot = p1_enhanced, 
+       width = 14, height = 10, dpi = 300, bg = "white")
+
+print("\n=== ENHANCEMENT SUMMARY ===")
+print("✓ Using ALL available data from your original genotype selection")
+print("✓ Ellipses based on complete genotypes only (for statistical validity)")
+print("✓ White-centered points highlight genotypes with incomplete data")
+print("✓ All variable labels shown (different sizes by loading strength)")
+print("✓ Genotype names in legend with custom colors") 
+print("✓ Red ellipses for Droughted, Blue for Watered")
+print("✓ Treatment shapes in legend")
+
+
 
 #---Boxplots of colonization----
 amf_filtered <- ds %>%
@@ -1534,11 +1281,11 @@ p
 #------Correlating Colonization to Drought Tolerance per Genotype----
 
 # Define colonization variables and drought response variables
-colonization_vars <- c("amf_rlc", "am_hyphae_dse_and_am_rlc", "arb_ves_and_arb_rlc", 
-                       "dse_dse_and_am_rlc", "vesicle_or_spore_ves_and_arb_rlc", 
+colonization_vars <- c("am_hyphae_rlc", "amf_rlc", "arb_rlc",
+                       "dse_rlc", "vesicle_rlc",
                        "lse_rlc", "coil_rlc", "olpidium_rlc", "mold_rlc", 
                        "plasmodiophorids_rlc", "dot_line_rlc", "non_am_rlc", 
-                       "fine_endo_rlc", "amf_in_dry_soil", "dse_in_dry_soil")
+                       "fine_endo_rlc", "amf_hyphae_in_dry_soil_m_g", "dse_hyphae_in_dry_soil_m_g")
 
 drought_response_vars <- c("shoot_wt", "florets", "d13c", "c", "d15n", "n", "p", 
                            "cn_ratio", "np_ratio")

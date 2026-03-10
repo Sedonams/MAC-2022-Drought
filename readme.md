@@ -28,4 +28,3 @@ All data files are located in the `data/` folder. The main dataset is `MAC 2022 
 ### How to Contribute
 
 If you have improvements or new analyses, please add your scripts to the `scripts/` folder and update this README with instructions.
-

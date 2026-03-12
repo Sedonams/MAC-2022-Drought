@@ -1,0 +1,10 @@
+"variable","cor","p.value","n","padj"
+"shoot_wt_eff",0.528361511039553,0.000322379883040935,42,0.000483569824561403
+"florets_eff",0.56637281413841,9.23821154126773e-05,42,0.000277146346238032
+"p_effect",-0.435083189237991,0.00398260482011497,42,0.00398260482011497
+"dse_hyphae",NA,NA,0,NA
+"dse_in_dry_soil",NA,NA,0,NA
+"dse_tot",NA,NA,0,NA
+"amf_tot",NA,NA,0,NA
+"lse",NA,NA,0,NA
+"no_fungus",NA,NA,0,NA

@@ -4,6 +4,7 @@
 #Doing some visualizations.
 #editing Bea's charts
 
+```{r,warning=FALSE,message=FALSE}
 #-----Loading Libraries and Data Sets----
 # Load necessary libraries
 library(readxl)   # For reading Excel files
@@ -32,7 +33,8 @@ setwd("H:/MAC-2022-Drought")
 #laptop path
 setwd("C:/Users/sedon/MAC-2022-Drought-1")
 
-ds <- read.csv("data/MAC22_cleaned.csv") #Using the cleaned up dataset. 
+#ds <- read.csv("data/MAC22_cleaned.csv") #Using the cleaned up dataset. 
+ds <- read.csv("data/dmgr_cleaned.csv") #Using the cleaned up dataset. 
 
 View(ds)
 
@@ -40,37 +42,7 @@ theme_set(theme_bw())
 
 #write.csv(ds, "H:/MAC-2022-Drought/dmgr_cleaned_again.csv", row.names = F)
 
-
-#------Making RLC's for the colonization data----
-library(dplyr)
-
-ds <- ds %>%
-  mutate(
-    arb_ves_and_arb = rowSums(dplyr::select(., arb, ves_and_arb), na.rm = TRUE),
-    vesicle_or_spore_ves_and_arb = rowSums(dplyr::select(., vesicle_or_spore, ves_and_arb), na.rm = TRUE),
-    am_hyphae_dse_and_am = rowSums(dplyr::select(., am_hyphae, dse_and_am), na.rm = TRUE),
-    dse_dse_and_am = rowSums(dplyr::select(., dse, dse_and_am), na.rm = TRUE)
-  )
-
-# Count non-zero values in each column to confirm successful combination
-sum(ds$arb_ves_and_arb != 0, na.rm = TRUE)
-sum(ds$arb != 0, na.rm = TRUE)
-
-columns_to_convert <- c("am_hyphae_dse_and_am","arb_ves_and_arb", "dse_dse_and_am", "vesicle_or_spore_ves_and_arb", "lse", "coil","fine_endo")
-
-ds <- ds %>%
-  mutate(across(all_of(columns_to_convert), 
-                ~ if_else(!is.na(.x) & !is.na(tot), 
-                          (.x / tot) * 100, 
-                          NA_real_),
-                .names = "{.col}_rlc"))
-
-ds <- ds %>%
-  rename(amf_rlc = rlc_p)
-
-
-
-# convert dmgr data to date safely
+# convert to date safely
 date_cols <- c("seed_or_reseed_date", "sprout_date", "transplant_date", "harvest_date")
 for (col in date_cols) {
   if (col %in% names(ds)) {
@@ -85,29 +57,29 @@ ds$sprout_or_transplant_to_harvest <- ds$sprout_or_transplant_to_harvest %>%
 str(ds)
 colnames(ds)
 
-dotchart(ds$shoot_wt, group = factor(ds$treatment))
-boxplot(shoot_wt ~ rep:treatment, data = ds, na.action = na.omit)
-boxplot(main_shoot_wtkg ~ genotype:treatment, data = ds, na.action = na.omit)
-boxplot(shoot_wt ~ genotype:treatment, data = ds, na.action = na.omit)
+dotchart(ds$total_biomass, group = factor(ds$treatment))
+boxplot(dry_root_wt ~ sprout_or_transplant_to_harvest:treatment, data = ds)
+boxplot(total_biomass_by_num ~ genotype:treatment, data = ds)
+boxplot(total_biomass ~ genotype:treatment, data = ds)
 
 # Linear model for total biomass by genotype and treatment
-
-m <- lm(shoot_wt ~ genotype + treatment, data = ds, na.action = na.omit)
+m <- lm(ds$total_biomass ~ ds$sprout_or_transplant_to_harvest)
 #Type ‘m’ to look at the model coefficients.
 m
 str(m)
 plot(m$residuals ~ m$fitted.values)
 
 # another model for total biomass by number of plants 
-#n <- lm(ds$shoot_wt ~ ds$genotype + ds$treatment + (1 | rep), na.action = na.omit)
-#n
-#str(n)
-#plot(n$residuals ~ n$fitted.values)
+n <- lm(ds$total_biomass ~ ds$genotype + ds$treatment)
+n
+str(n)
+plot(n$residuals ~ n$fitted.values)
+
 
 
 library(car)
 ds$treatment <- as.factor(ds$treatment)
-leveneTest(shoot_wt ~ treatment, data = ds, na.action = na.omit)
+leveneTest(total_biomass ~ sprout_or_transplant_to_harvest, data = ds)
 plot(m) # Example: plot residuals
 plot(n) # Example: plot residuals
 shapiro.test(m$residuals) 
@@ -151,7 +123,7 @@ print(p_cooks)
 influential <- which(cooks.distance(m) > threshold)
 if(length(influential) > 0) {
   cat("\nInfluential observations (Cook's D >", round(threshold, 4), "):\n")
-  print(ds[influential, c("genotype", "treatment", "shoot_wt")])
+  print(ds[influential, c("genotype", "treatment", "rep", "total_biomass")])
 }
 
 
@@ -486,6 +458,31 @@ print(importance_summary)
 
 
 
+
+
+#------Making RLC's for the colonization data----
+
+ds <- ds %>%
+  mutate(arb_ves_and_arb = rowSums(select(., arb, ves_and_arb), na.rm = TRUE)) %>%
+  mutate(vesicle_or_spore_ves_and_arb = rowSums(select(., vesicle_or_spore, ves_and_arb), na.rm = TRUE)) %>%
+  mutate(am_hyphae_dse_and_am = rowSums(select(., am_hyphae, dse_and_am), na.rm = TRUE)) %>%
+  mutate(dse_dse_and_am = rowSums(select(., dse, dse_and_am), na.rm = TRUE))
+
+# Count non-zero values in each column to confirm successful combination
+sum(ds$arb_ves_and_arb != 0, na.rm = TRUE)
+sum(ds$arb != 0, na.rm = TRUE)
+
+columns_to_convert <- c("am_hyphae_dse_and_am","arb_ves_and_arb", "dse_dse_and_am", "vesicle_or_spore_ves_and_arb", "lse", "coil","fine_endo")
+
+ds <- ds %>%
+  mutate(across(all_of(columns_to_convert), 
+                ~ if_else(!is.na(.x) & !is.na(tot), 
+                          (.x / tot) * 100, 
+                          NA_real_),
+                .names = "{.col}_rlc"))
+
+ds <- ds %>%
+  rename(amf_rlc = rlc_p)
 
 #------Drought Response Heatmap for nutrients biomass and florets----
 
@@ -2094,8 +2091,9 @@ gls1 <- gls(dry_root_wt ~ treatment + genotype + sprout_or_transplant_to_harvest
             method = "REML",
             na.action = na.exclude)
 
-# 2️⃣ Fit LME model with replicate
-lme1 <- lme(dry_root_wt ~ treatment + genotype + sprout_or_transplant_to_harvest + rep,
+# 2️⃣ Fit LME model with replicate as random effect
+lme1 <- lme(dry_root_wt ~ treatment + genotype + sprout_or_transplant_to_harvest,
+            random = ~ 1 | rep,
             data = ds,
             method = "REML",
             na.action = na.exclude)
@@ -2123,57 +2121,30 @@ tab_model(lme_final, show.se = TRUE)
 
 
 # Get predicted values from the model
-lmer_final <- lmer(dry_root_wt ~ treatment + genotype + sprout_or_transplant_to_harvest + (1 | rep),
+lmer_final <- lmer(dry_root_wt ~ genotype + sprout_or_transplant_to_harvest + (1 | rep),
                    data = ds,
                    REML = TRUE)
 
-library(ggeffects)
-library(ggplot2)
 
-# Clean data (important)
-ds_clean <- ds %>%
-  dplyr::select(dry_root_wt, treatment, genotype, sprout_or_transplant_to_harvest, rep) %>%
-  na.omit()
+lmer_final <- na.action(lmer_final, na.exclude)
 
-# Refit model on clean data (optional but safest)
-lmer_final <- lmer(
-  dry_root_wt ~ treatment + genotype + sprout_or_transplant_to_harvest + rep,
-  data = ds_clean,
-  REML = TRUE
-)
-
-# Get marginal effects for harvest age
-pred <- ggpredict(
-  lmer_final,
-  terms = "sprout_or_transplant_to_harvest [all]"
-)
-
-# Plot
-plot(pred) +
-  labs(
-    title = "Effect of Harvest Age on Dry Root Weight",
-    x = "Days from Sprout/Transplant to Harvest",
-    y = "Predicted Dry Root Weight (g)"
-  ) +
-  theme_minimal(base_size = 13)
-
+pred <- ggpredict(lmer_final, terms = "sprout_or_transplant_to_harvest")
+plot(pred, show_data = TRUE) +
+  labs(x = "Sprout or Transplant to Harvest (days)",
+       y = "Dry Root Weight (g)",
+       title = "Predicted relationship between plant age and dry root weight") +
+  theme_minimal()
 
 library(MASS)
 step_model <- stepAIC(lme1_ml, direction = "backward")
 summary(step_model)
 
+library(lme4)
+library(MuMIn)
+
 # Refit with ML
 lmer_final_ml <- update(lmer_final, REML = FALSE)
 
-ds_clean <- na.omit(ds[, c("dry_root_wt", "treatment", "genotype", "sprout_or_transplant_to_harvest", "rep")])
-
-lmer_final_ml <- lmer(
-  dry_root_wt ~ treatment * genotype + sprout_or_transplant_to_harvest + (1 | rep),
-  data = ds_clean,
-  REML = FALSE
-)
-
-options(na.action = "na.fail")  # Required for dredge
 # Run dredge for model selection
 all_models <- dredge(lmer_final_ml)
 # View the top models
@@ -2185,6 +2156,9 @@ head(all_models, 5)
 # Best model------------------------------------------
 best_model <- get.models(all_models, 1)[[1]]
 summary(best_model)
+
+library(nlme)
+library(MuMIn)
 
 lme_ml <- update(lme1, method = "ML")
 
@@ -2200,72 +2174,56 @@ performance(lme_final)
 set.seed(123)
 performance_cv(lme_final, method = "k_fold", k = 5, stack = FALSE)
 
+library(lme4)
+
 set.seed(123)
 
-# Clean data
-ds_clean <- na.omit(ds[, c("dry_root_wt", "treatment", "genotype", "sprout_or_transplant_to_harvest", "rep")])
 
-colnames(ds_clean)
 
-# Ensure factors are consistent across folds
-ds_clean$treatment <- factor(ds_clean$treatment)
-ds_clean$rep <- factor(ds_clean$rep)
+
 
 # Number of folds
 k <- 5
 
-# Assign folds by rep
-groups <- unique(ds_clean$rep)
+# Get unique groups and randomly assign them to folds
+groups <- unique(ds$rep)
 fold_assignments <- sample(rep(1:k, length.out = length(groups)))
 names(fold_assignments) <- groups
 
-# Store results
+# Data frame to store results
 cv_results <- data.frame(Fold = integer(), R2 = numeric(), RMSE = numeric())
 
-# Cross-validation loop
+# Loop through folds
 for (fold in 1:k) {
-  cat("Running fold", fold, "...\n")
   
+  # Identify test and train groups
   test_groups <- names(fold_assignments[fold_assignments == fold])
-  train_data <- ds_clean[!ds_clean$rep %in% test_groups, ]
-  test_data  <- ds_clean[ds_clean$rep %in% test_groups, ]
+  train_data <- ds[!ds$rep %in% test_groups, ]
+  test_data  <- ds[ds$rep %in% test_groups, ]
   
-  # Re-level factors in test to match training
-  test_data$treatment <- factor(test_data$treatment, levels = levels(train_data$treatment))
-  test_data$rep <- factor(test_data$rep, 
-  levels = levels(train_data$rep))
+  # Fit the mixed model on the training data
+  model <- lmer(dry_root_wt ~ genotype + sprout_or_transplant_to_harvest + (1|rep),
+                data = train_data)
   
-  # Fit mixed model on training data
-  model <- try(lmer(dry_root_wt ~ treatment + genotype + sprout_or_transplant_to_harvest,
-                    data = train_data),
-               silent = TRUE)
-  
-  # Skip fold if model failed
-  if (inherits(model, "try-error")) {
-    cv_results <- rbind(cv_results, data.frame(Fold = fold, R2 = NA, RMSE = NA))
-    next
-  }
-  
-  # Predict on test data (allow.new.levels=TRUE handles unseen reps)
+  # Predict on the test data
   preds <- predict(model, newdata = test_data, allow.new.levels = TRUE)
   
-  # Compute performance metrics
+  # Calculate R² and RMSE for this fold
   ss_res <- sum((test_data$dry_root_wt - preds)^2)
   ss_tot <- sum((test_data$dry_root_wt - mean(test_data$dry_root_wt))^2)
   r2 <- 1 - (ss_res / ss_tot)
   rmse <- sqrt(mean((test_data$dry_root_wt - preds)^2))
   
+  # Store results
   cv_results <- rbind(cv_results, data.frame(Fold = fold, R2 = r2, RMSE = rmse))
 }
 
-# Summarize results
+# Average performance across folds
 cv_summary <- data.frame(
-  Mean_R2 = mean(cv_results$R2, na.rm = TRUE),
-  SD_R2   = sd(cv_results$R2, na.rm = TRUE),
-  Mean_RMSE = mean(cv_results$RMSE, na.rm = TRUE),
-  SD_RMSE   = sd(cv_results$RMSE, na.rm = TRUE)
+  Mean_R2 = mean(cv_results$R2),
+  SD_R2   = sd(cv_results$R2),
+  Mean_RMSE = mean(cv_results$RMSE),
+  SD_RMSE   = sd(cv_results$RMSE)
 )
 
-print(cv_results)
-print(cv_summary)
 cv_results

@@ -4,9 +4,8 @@
 #This script was originally written by SS. I'm adapting it for some analyses for the Sorghum symposium happening in 2 weeks.
 #Cleaning up the main dataset for analysis, so it's in good shape and everyone's using the same version.
 
-#-----Loading Libraries and Data Sets----
-# Load necessary libraries
-library(readxl)   # For reading Excel files
+Load necessary libraries
+```{r,warning=FALSE,message=FALSE}library(readxl)   # For reading Excel files
 library(janitor)  # For cleaning column names
 library(dplyr)    # For using the pipe operator (%>%)
 library(corrr)    # For nicer correlation matrices
@@ -16,14 +15,17 @@ library(EnvStats)
 library(lubridate)
 library(stringr)
 library(gridExtra)
+```
 
-
-#Set up working directory
+Set up working directory
+```{r,warning=FALSE,message=FALSE}
 getwd()
 #This is my path
 setwd("H:/MAC-2022-Drought")
+```
 
-# Read and clean the data
+Read and clean the data
+```{r,warning=FALSE,message=FALSE}
 dmgr <- read_xlsx("data/MAC 2022 Mother.xlsx", sheet = "DMGR Data") %>%
   clean_names() %>% # nolint
   rename(treatment = treat) %>%
@@ -41,8 +43,10 @@ for (col in date_cols) {
 }
 
 colnames(dmgr)
+```
 
-# onto the amf scoring tab cleanup
+onto the amf scoring tab cleanup
+```{r,warning=FALSE,message=FALSE}
 columns_to_convert <- c("am_hyphae", "arb", "dse", "vesicle", "lse",
                         "coil", "fine_endo", "olpidium", "mold",
                         "plasmodiophorids", "dot_line", "non_am")
@@ -75,12 +79,12 @@ amf <- read_xlsx("data/MAC 2022 Mother.xlsx", sheet = "AMF Score") %>%
                 ~ na_if(.x, 0))) %>%
   mutate(across(ends_with("_rlc"), #Replace NA with 0 where tot > 0
                 ~ if_else(tot > 0 & is.na(.x), 0, .x)))
-
-
 colnames(amf)
 View(amf)
+```
 
-#now cleaning up the main weights data
+now cleaning up the main weights data
+```{r,warning=FALSE,message=FALSE}
 mac <- read_xlsx("data/MAC 2022 Mother.xlsx", sheet = "MAC22 Weights") %>%
   clean_names() %>%
   rename(treatment = treat) %>%
@@ -91,17 +95,21 @@ mac <- read_xlsx("data/MAC 2022 Mother.xlsx", sheet = "MAC22 Weights") %>%
          position = as.integer(position))
 
 colnames(mac)
+View(mac)
+```
 
-
-#cleaning up the Extramatical Hyphae (emh) data
+Cleaning up the Extramatical Hyphae (emh) data
+```{r,warning=FALSE,message=FALSE}
 emh <- read_xlsx("data/MAC 2022 Mother.xlsx", sheet = "EMH") %>%
   clean_names() %>%
   mutate(genotype = stringr::str_replace(as.character(genotype), "\\.0$", ""),
          position = as.integer(position))
 
 colnames(emh)
+```
+Leaf Tissue Nutrient Data
 
-#Leaf Tissue Nutrient Data
+```{r,warning=FALSE,message=FALSE}
 nuts <- read_xlsx("data/MAC 2022 Mother.xlsx",
                   sheet = "MAC22 Nutrients") %>%
   clean_names() %>%
@@ -124,8 +132,10 @@ soilmoisture <- read_xlsx("data/mac22_all_probes.xlsx") %>%
 
 colnames(soilmoisture)
 View(soilmoisture)
+```
 
-#-----------Combining Data----
+-----------Combining Data--------------
+```{r,warning=FALSE,message=FALSE}
 ds <- mac  %>%
   left_join(amf, by = c("genotype", "treatment", "rep",
                         "position", "sample_id")) %>%
@@ -133,12 +143,14 @@ ds <- mac  %>%
                         "position", "sample_id")) %>%
   left_join(nuts, by = c("genotype", "treatment", "rep",
                          "position", "sample_id")) %>%
-  mutate(across(c(florets, shoot_wt, main_shoot_wtkg, amf_in_dry_soil, tot),
+  mutate(across(c(florets, tot_shoot_wtg, main_shoot_wtkg, amf_hyphae_in_dry_soil_m_g, tot),
                 as.numeric))
 
 glimpse(ds)
 View(ds)
+```
 
+```{r,warning=FALSE,message=FALSE}
 write.csv(ds, "data/MAC22_cleaned.csv", row.names = FALSE)
-
-ds %>% group_by(genotype) %>% tally() %>% filter(n < 5) #Cool. what is this
+```
+ds %>% group_by(genotype) %>% tally() %>% filter(n < 5) Cool. what is this

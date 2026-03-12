@@ -4,6 +4,7 @@
 #Doing some visualizations.
 #editing Bea's charts
 
+```{r,warning=FALSE,message=FALSE}
 #-----Loading Libraries and Data Sets----
 # Load necessary libraries
 library(readxl)   # For reading Excel files
@@ -31,6 +32,10 @@ getwd()
 setwd("H:/MAC-2022-Drought")
 #laptop path
 setwd("C:/Users/sedon/MAC-2022-Drought-1")
+
+ds <- read.csv("MAC22_cleaned.csv") #Using the cleaned up dataset. Missing dmgr. 
+
+theme_set(theme_bw())
 
 #ds <- read.csv("data/MAC22_cleaned.csv") #Using the cleaned up dataset. 
 ds <- read.csv("data/dmgr_cleaned.csv") #Using the cleaned up dataset. 

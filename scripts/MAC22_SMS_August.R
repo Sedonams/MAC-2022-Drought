@@ -35,34 +35,9 @@ ds <- read.csv("MAC22_cleaned.csv") #Using the cleaned up dataset. Missing some 
 
 theme_set(theme_bw())
 
-#------Making RLC's for the colonization data----
-
-ds <- ds %>%
-  mutate(arb_ves_and_arb = rowSums(select(., arb, ves_and_arb), na.rm = TRUE)) %>%
-  mutate(vesicle_or_spore_ves_and_arb = rowSums(select(., vesicle_or_spore, ves_and_arb), na.rm = TRUE)) %>%
-  mutate(am_hyphae_dse_and_am = rowSums(select(., am_hyphae, dse_and_am), na.rm = TRUE)) %>%
-  mutate(dse_dse_and_am = rowSums(select(., dse, dse_and_am), na.rm = TRUE))
-
-# Count non-zero values in each column to confirm successful combination
-sum(ds$arb_ves_and_arb != 0, na.rm = TRUE)
-sum(ds$arb != 0, na.rm = TRUE)
-
-columns_to_convert <- c("am_hyphae_dse_and_am","arb_ves_and_arb", "dse_dse_and_am", "vesicle_or_spore_ves_and_arb", "lse", "coil",
-"olpidium",	"mold", "plasmodiophorids",	"dot_line",	"non_am",	"fine_endo")
-
-ds <- ds %>%
-  mutate(across(all_of(columns_to_convert), 
-                ~ if_else(!is.na(.x) & !is.na(tot), 
-                          (.x / tot) * 100, 
-                          NA_real_),
-                .names = "{.col}_rlc"))
-
-ds <- ds %>%
-  rename(amf_rlc = rlc_p)
-
 #------Drought Response Heatmap for nutrients biomass and florets----
 
-vars <- c("shoot_wt", "florets", "d13c", "c", "d15n", "n", "p", "cn_ratio", "np_ratio")
+vars <- c("tot_shoot_wtg", "florets", "d13c", "c", "d15n", "n", "p", "cn_ratio", "np_ratio")
 
 # Step 1: Scale data
 ds_scaled <- ds %>%
@@ -124,7 +99,7 @@ library(scales)   # For better formatting
 
 # Create prettier variable names for display
 pretty_names <- c(
-  "shoot_wt" = "Shoot Weight",
+  "tot_shoot_wtg" = "Shoot Weight",
   "florets" = "Florets",
   "arb" = "Arbuscules",
   "vesicle_or_spore" = "Vesicles/Spores",
@@ -206,7 +181,7 @@ ggsave("drought_response_heatmap_simple.png", plot = p, width = 14, height = 8, 
 vars <- c("amf_rlc", "am_hyphae_dse_and_am_rlc","arb_ves_and_arb_rlc", "dse_dse_and_am_rlc",
           "vesicle_or_spore_ves_and_arb_rlc", "lse_rlc", "coil_rlc",
           "olpidium_rlc",	"mold_rlc", "plasmodiophorids_rlc",	"dot_line_rlc",	"non_am_rlc",	
-          "fine_endo_rlc","amf_in_dry_soil","dse_in_dry_soil","shoot_wt", "florets", "d13c",
+          "fine_endo_rlc","amf_in_dry_soil","dse_in_dry_soil","tot_shoot_wtg", "florets", "d13c",
           "c", "d15n", "n", "p", "cn_ratio", "np_ratio")
 
 # Step 1: Scale data
@@ -297,7 +272,7 @@ pretty_names <- c(
   "fine_endo_rlc" = "Fine Endophytes RLC",
   "amf_in_dry_soil" = "AMF in Dry Soil",
   "dse_in_dry_soil" = "DSE in Dry Soil",
-  "shoot_wt" = "Shoot Weight",
+  "tot_shoot_wtg" = "Shoot Weight",
   "florets" = "Florets",
   "arb" = "Arbuscules",
   "vesicle_or_spore" = "Vesicles/Spores",
@@ -467,7 +442,7 @@ cat("Power analysis results written to power_analysis_mycorrhizal.csv\n")
 
 #---Ordination (PCA) for plant traits and leaf nutrients----
 # Define all variables for Ordination, plant traits and leaf nutrients
-all_vars <- c("shoot_wt", "florets", "d13c",
+all_vars <- c("tot_shoot_wtg", "florets", "d13c",
   "c", "d15n", "n", "p")
 
 # Prepare data for PCA
@@ -588,7 +563,7 @@ pretty_var_names <- c(
   "fine_endo_rlc" = "Fine Endophytes",
   "amf_in_dry_soil" = "AMF in Dry Soil",
   "dse_in_dry_soil" = "DSE in Dry Soil",
-  "shoot_wt" = "Shoot Weight",
+  "tot_shoot_wtg" = "Shoot Weight",
   "florets" = "Florets",
   "d13c" = "δ¹³C",
   "c" = "Carbon Content",
@@ -764,7 +739,7 @@ all_vars <- c(
   "amf_rlc", "am_hyphae_dse_and_am_rlc", "arb_ves_and_arb_rlc", "dse_dse_and_am_rlc",
   "vesicle_or_spore_ves_and_arb_rlc", "lse_rlc", "coil_rlc",
   "olpidium_rlc", "mold_rlc", "plasmodiophorids_rlc", "dot_line_rlc", "non_am_rlc",
-  "fine_endo_rlc", "amf_in_dry_soil", "dse_in_dry_soil", "shoot_wt", "florets", "d13c",
+  "fine_endo_rlc", "amf_in_dry_soil", "dse_in_dry_soil", "tot_shoot_wtg", "florets", "d13c",
   "c", "d15n", "n", "p")
 
 # Prepare data for PCA
@@ -885,7 +860,7 @@ pretty_var_names <- c(
   "fine_endo_rlc" = "Fine Endophytes",
   "amf_in_dry_soil" = "AMF in Dry Soil",
   "dse_in_dry_soil" = "DSE in Dry Soil",
-  "shoot_wt" = "Shoot Weight",
+  "tot_shoot_wtg" = "Shoot Weight",
   "florets" = "Florets",
   "d13c" = "δ¹³C",
   "c" = "Carbon Content",
@@ -1287,7 +1262,7 @@ colonization_vars <- c("amf_rlc", "am_hyphae_dse_and_am_rlc", "arb_ves_and_arb_r
                        "plasmodiophorids_rlc", "dot_line_rlc", "non_am_rlc", 
                        "fine_endo_rlc", "amf_in_dry_soil", "dse_in_dry_soil")
 
-drought_response_vars <- c("shoot_wt", "florets", "d13c", "c", "d15n", "n", "p", 
+drought_response_vars <- c("tot_shoot_wtg", "florets", "d13c", "c", "d15n", "n", "p", 
                            "cn_ratio", "np_ratio")
 
 # Step 1: Calculate drought effect (standardized) for each genotype and variable
@@ -1385,7 +1360,7 @@ if(ncol(col_data_clean) > 0 & ncol(resp_data_clean) > 0) {
   )
   
   pretty_resp_names <- c(
-    "shoot_wt" = "Shoot Weight",
+    "tot_shoot_wtg" = "Shoot Weight",
     "florets" = "Florets",
     "d13c" = "δ¹³C",
     "c" = "Carbon Content",

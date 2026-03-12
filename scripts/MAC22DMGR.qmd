@@ -1,10 +1,10 @@
-
 #BB
 #8/5/25
 #This script was originally written by SS. I'm adapting it for some analyses for the Sorghum symposium happening in 2 weeks.
 #Doing some visualizations.
 #editing Bea's charts
 
+```{r,warning=FALSE,message=FALSE}
 #-----Loading Libraries and Data Sets----
 # Load necessary libraries
 library(readxl)   # For reading Excel files
@@ -22,18 +22,468 @@ library(scales)
 library(viridis)
 library(ggrepel)  # For smart label positioning
 library(tibble)
+library(lme4)
+library(nlme)
+```
 
-#Set up working directory
+Set up working directory
+
+```{r,warning=FALSE,message=FALSE}
 getwd()
 
 #Work path
 #setwd("H:/MAC-2022-Drought")
 #laptop path
-setwd("C:/Users/sedon/Downloads")
+#setwd("C:/Users/sedon/MAC-2022-Drought-1")
 
-ds <- read.csv("MAC22_cleaned.csv") #Using the cleaned up dataset. Missing some things like dmgr. 
+#ds <- read.csv("data/MAC22_cleaned.csv") #Using the cleaned up dataset. 
+ds <- read.csv("data/dmgr_cleaned.csv") #Using the cleaned up dataset. 
+
+View(ds)
 
 theme_set(theme_bw())
+```
+
+```{r,warning=FALSE,message=FALSE}
+MAC22_CLEANED <- read.csv("data/MAC22_cleaned.csv")
+MAC22_DMGR <- read.csv("data/mac22_dmgr.csv") 
+MAC22_ORIGINS <- read.csv("data/mac22_origins.csv")
+MAC22_OUT <- read.csv("data")
+```
+
+
+#Response = biomass (shoot, root, leaf), nutrient content, or fungal colonization.
+#Fixed effects = treatment, genotype origin traits, genotype
+#Random effects = NumofPlants (since multiple samples per genotype), rep, position, or scorer.
+
+```{r,warning=FALSE,message=FALSE}
+MAC22_MLM_ShootWt <- ShootWt ~ Treat * genotype + (1|NumofPlants) + (1|Rep)
+```
+
+
+
+
+
+```{r,warning=FALSE,message=FALSE}
+#write.csv(ds, "H:/MAC-2022-Drought/dmgr_cleaned_again.csv", row.names = F)
+
+# convert to date safely
+date_cols <- c("seed_or_reseed_date", "sprout_date", "transplant_date", "harvest_date")
+for (col in date_cols) {
+  if (col %in% names(ds)) {
+    # Specify the date format, e.g. "%Y-%m-%d" or "%m/%d/%Y" as needed
+    ds[[col]] <- as.Date(as.character(ds[[col]]), format = "%Y-%m-%dT%H:%M:%OSZ")
+  }
+}
+
+ds$sprout_or_transplant_to_harvest <- ds$sprout_or_transplant_to_harvest %>%
+  as.integer()
+
+str(ds)
+colnames(ds)
+
+dotchart(ds$total_biomass, group = factor(ds$treatment))
+boxplot(dry_root_wt ~ sprout_or_transplant_to_harvest:treatment, data = ds)
+boxplot(total_biomass_by_num ~ genotype:treatment, data = ds)
+boxplot(total_biomass ~ genotype:treatment, data = ds)
+
+# Linear model for total biomass by genotype and treatment
+m <- lm(ds$total_biomass ~ ds$sprout_or_transplant_to_harvest)
+#Type ‘m’ to look at the model coefficients.
+m
+str(m)
+plot(m$residuals ~ m$fitted.values)
+
+# another model for total biomass by number of plants 
+n <- lm(ds$total_biomass ~ ds$genotype + ds$treatment)
+n
+str(n)
+plot(n$residuals ~ n$fitted.values)
+
+
+
+library(car)
+ds$treatment <- as.factor(ds$treatment)
+leveneTest(total_biomass ~ sprout_or_transplant_to_harvest, data = ds)
+plot(m) # Example: plot residuals
+plot(n) # Example: plot residuals
+shapiro.test(m$residuals) 
+shapiro.test(n$residuals)
+
+
+
+
+# Calculate Cook's distance and create dataframe with observation numbers
+cooks_df <- data.frame(
+  obs = 1:length(cooks.distance(m)),
+  distance = cooks.distance(m)
+)
+
+# Calculate threshold for influential points (commonly used is 4/n)
+threshold <- 4/nrow(ds)
+
+# Create Cook's distance plot
+p_cooks <- ggplot(cooks_df, aes(x = obs, y = distance)) +
+  geom_point(aes(color = distance > threshold), size = 3) +
+  geom_hline(yintercept = threshold, linetype = "dashed", color = "red") +
+  scale_color_manual(values = c("steelblue", "red")) +
+  labs(
+    title = "Cook's Distance Plot",
+    subtitle = "Red dashed line indicates threshold (4/n)",
+    x = "Observation Number",
+    y = "Cook's Distance"
+  ) +
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+# Print plot
+print(p_cooks)
+
+
+# Identify influential points
+influential <- which(cooks.distance(m) > threshold)
+if(length(influential) > 0) {
+  cat("\nInfluential observations (Cook's D >", round(threshold, 4), "):\n")
+  print(ds[influential, c("genotype", "treatment", "rep", "total_biomass")])
+}
+
+
+
+
+############################
+#trying somthing
+MAC22_MLM_total_biomass <- lmer(total_biomass ~ treatment * genotype + sprout_or_transplant_to_harvest +(1|num_of_plants) + (1|rep), data = ds)
+plot(residuals(MAC22_MLM_total_biomass)) # Example: plot residuals
+plot(MAC22_MLM_total_biomass)
+#
+
+
+# Filter to groups with at least 2 observations, didnt work
+ds_bartlett <- ds %>% 
+  group_by(treatment, genotype) %>% 
+  filter(n() >= 2) %>% 
+  ungroup()
+m <- bartlett.test(total_biomass ~ interaction(treatment, genotype), data = ds_bartlett)
+# Bartlett test does not return residuals or fitted values, so plotting them is not applicable.
+print(m)
+####################################
+
+hist (ds$dry_root_wt)
+hist (ds$total_biomass_by_num)
+hist (n$residuals)
+
+hist (ds$total_biomass)
+hist (m$residuals)
+
+
+#Q-Q plot for m model 
+qqnorm(m$residuals)
+#It can be helpful to see a reference diagonal. Add the line by typing
+qqline(m$residuals)
+
+# Q-Q plot for n model 
+qqnorm(n$residuals)
+qqline(n$residuals)
+
+# Shapiro-Wilk test for normality
+shapiro.test(m$residuals)
+shapiro.test(n$residuals)
+# If p-value is less than 0.05, we reject the null hypothesis that the data is normally distributed. meaning data is not normal.
+
+table(ds$total_biomass == 0)
+
+plot(ds)
+library(car)
+
+# Check for multicollinearity using Variance Inflation Factor (VIF)
+m <- lm(data=ds, total_biomass ~ treatment + genotype + num_of_plants + sprout_or_transplant_to_harvest )
+vif(m)
+
+plot(data=ds, sprout_or_transplant_to_harvest~total_biomass)
+M.loess <- lm(sprout_or_transplant_to_harvest~total_biomass, data = ds)
+Fit <- fitted(M.loess)
+head(Fit)
+lines(x = ds$total_biomass, y = Fit)
+
+#plot(ds) not working
+colnames(ds)
+
+colnames(ds)
+
+coplot(total_biomass ~ num_of_plants | treatment,
+       data = ds,
+       panel = function(x, y, ...) {
+         tmp <- lm(y ~ x, na.action = na.omit)
+         abline(tmp)
+         points(x, y) })
+
+#Check for autocorrelation in residuals if data are time-ordered
+acf(m$residuals, main = "ACF of Model Residuals")
+
+colnames(ds)
+
+ggplot(ds, aes(x = shoot_wt, y = dry_root_wt)) +
+  geom_point(size = 2, color = "deeppink") +
+  geom_smooth(method = "lm", color = "black") +
+  theme_bw()
+
+model1 <- lm(shoot_wt ~ dry_root_wt, data = ds)
+par(mfrow = c(2, 2))
+plot(model1)
+
+#install.packages("performance")   # if not already installed
+library(performance)
+#install.packages("sjPlot")
+library(sjPlot)
+check_model(model1)
+
+summary(model1)
+tab_model(model1)
+anova(model1)
+
+null_model <- lm(shoot_wt ~ 1, data = ds)
+anova(null_model, model1)
+
+g = ggplot(ds, aes(y=shoot_wt, x=dry_root_wt)) + geom_point(size=2, color="deeppink") + theme_bw()
+g= g+ geom_smooth(method="lm", color="black")
+g
+
+m=ggpredict(model = model1, terms = c("dry_root_wt")) 
+plot(m, add.data=TRUE, color="deeppink")
+
+ds$genotype <- as.factor(ds$genotype)
+ggplot(ds, aes(x = treatment, y = total_biomass, fill = treatment)) +
+  geom_boxplot() +
+  scale_fill_brewer(palette = "Accent") +
+  theme_bw()
+
+model2 <- lm(total_biomass ~ treatment, data = ds)
+summary(model2)
+tab_model(model2)
+
+colnames(ds)
+
+
+ds$shoot_weigher <- as.factor(ds$shoot_weigher)
+ggplot(ds, aes(x = shoot_weigher, y = shoot_wt, fill = shoot_weigher)) +
+  geom_boxplot() +
+  scale_fill_brewer(palette = "Accent") +
+  theme_bw()
+
+ds$root_weigher <- as.factor(ds$root_weigher)
+ggplot(ds, aes(x = root_weigher, y = dry_root_wt, fill = root_weigher)) +
+  geom_boxplot() +
+  scale_fill_brewer(palette = "Accent") +
+  theme_bw()
+
+model3 <- lm(shoot_wt ~ shoot_weigher, data = ds)
+summary(model3)
+# You should not trust these p-values to determine significance instead look at the F statistic for overall model fit
+anova(model3)
+
+
+
+model4 <- lm(total_biomass ~ sprout_or_transplant_to_harvest * treatment, data = ds)
+summary(model4)
+anova(model4)
+# Type III ANOVA to assess main effects while accounting for interaction
+Anova(model4, type = 3)
+plot_model(model4, type = "pred", terms = c("sprout_or_transplant_to_harvest", "treatment"))
+
+library(emmeans)
+# Estimate slope for each sex group and test if slopes differ
+slope_tests <- emtrends(model4, ~ treatment, var = "sprout_or_transplant_to_harvest")
+
+# Compare slopes between sexes (test interaction)
+pairs(slope_tests)
+test(slope_tests)
+
+model5 <- lm(total_biomass ~ treatment + genotype + num_of_plants + sprout_or_transplant_to_harvest, data = ds)
+summary(model5)
+Anova(model5, type=2)
+
+#ggeffects not working
+# Clean plot with confidence ribbon
+ggplot(pred, aes(x = x, y = predicted)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), fill = "grey80", alpha = 0.5) +
+  geom_line(color = "black", size = 1.2) +
+  geom_point(data = spar, aes(x = Wing, y = Weight), color = "deeppink", alpha = 0.4, size = 2) +
+  labs(x = "Wing Length (mm)", y = "Predicted Weight (g)",
+       title = "Model-Predicted Weight by Wing Length\n(Controlling for Tarsus and Head Length)") +
+  theme_bw(base_size = 14)
+
+
+
+ds1 <- ds %>% mutate(across(c(sprout_or_transplant_to_harvest, num_of_plants), list(s = scale)))
+model7 <- lm(total_biomass ~ sprout_or_transplant_to_harvest_s + num_of_plants_s, data = ds1)
+summary(model7)
+car::vif(model7)
+
+
+
+
+
+
+
+
+
+# Visualize pairwise relationships between key numeric variables
+
+
+
+# Pairwise relationships between key numeric variables
+numeric_vars <- ds %>%
+  dplyr::select(dry_root_wt, shoot_wt, total_biomass, 
+  sprout_or_transplant_to_harvest, num_of_plants) %>%
+  # Remove any rows with all NA values
+  filter(rowSums(!is.na(.)) > 0)
+
+# Create enhanced pairs plot with modified settings
+p <- ggpairs(numeric_vars,
+        lower = list(continuous = wrap("points", alpha = 0.3)),
+        diag = list(continuous = wrap("barDiag", bins = 30)),
+        upper = list(continuous = wrap("cor", size = 3)),
+        title = "Relationships Between Key Variables") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold", size = 14),
+    strip.text = element_text(size = 8)
+  )
+
+# Display plot
+print(p)
+
+# Save high-resolution version of the plot 
+ggsave("C:/Users/sms689/Downloads/enhanced_pairs_plot.png", plot = p, width = 10, height = 10, dpi = 300)
+
+
+######################################################
+
+#----SHAP values for biomass predictors----
+
+# Load required packages
+library(xgboost)
+library(shapr)
+library(dplyr)
+
+# Prepare data
+  shap_data <- ds %>%
+    select(
+    total_biomass,  # response
+    days_to_harvest,
+    num_of_plants,
+    dry_root_wt,
+    shoot_wt
+  ) %>%
+  na.omit()
+
+X <- shap_data[, setdiff(names(shap_data), "total_biomass")]
+y <- shap_data$total_biomass
+dtrain <- xgb.DMatrix(as.matrix(X), label = y)
+
+# Train model
+param <- list(objective = "reg:squarederror", max_depth = 3, eta = 0.1)
+xgb_model <- xgb.train(param, dtrain, nrounds = 50)
+
+# ---- SHAPR steps ----
+
+# 1. Create explainer object
+explainer <- setup(
+  x_train = X,
+  model = xgb_model,
+  verbose = NULL
+)
+
+# 2. Get baseline prediction
+phi0 <- mean(y)
+
+# 3. Run explanation
+shap_values <- explain(
+  x_test = X,
+  x_train = X,
+  model = xgb_model,
+  explainer = explainer,
+  approach = "empirical",   
+  phi0 = phi0   # <- key fix
+)
+
+# 4. Inspect
+head(shap_values$shapley_values)
+
+# Calculate SHAP values
+shap_values <- explain(
+  X,
+  explainer,
+  approach = "empirical",
+  n_combinations = 1000  # Adjust based on computational resources
+)
+
+# Create SHAP summary plot
+shap_long <- data.frame(
+  feature = rep(colnames(X), each = nrow(X)),
+  shap_value = unlist(shap_values$phi),
+  feature_value = unlist(lapply(X, function(x) rep(x, length(colnames(X)))))
+)
+
+# Plot SHAP summary
+ggplot(shap_long, aes(x = shap_value, y = reorder(feature, abs(shap_value)))) +
+  geom_violin(fill = "lightblue", alpha = 0.5) +
+  geom_point(aes(color = feature_value), alpha = 0.5) +
+  scale_color_viridis_c() +
+  labs(
+    title = "SHAP Values for Biomass Predictors",
+    x = "SHAP Value (impact on model output)",
+    y = "Feature",
+    color = "Feature Value"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold"),
+    axis.text = element_text(size = 10),
+    legend.position = "right"
+  )
+
+# Save plot
+ggsave("shap_summary_plot.png", width = 10, height = 6, dpi = 300)
+
+# Print feature importance summary
+importance_summary <- data.frame(
+  feature = colnames(X),
+  mean_abs_shap = colMeans(abs(shap_values$phi))
+) %>%
+  arrange(desc(mean_abs_shap))
+
+print(importance_summary)
+
+
+
+
+####################################################
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #------Making RLC's for the colonization data----
 
@@ -47,8 +497,7 @@ ds <- ds %>%
 sum(ds$arb_ves_and_arb != 0, na.rm = TRUE)
 sum(ds$arb != 0, na.rm = TRUE)
 
-columns_to_convert <- c("am_hyphae_dse_and_am","arb_ves_and_arb", "dse_dse_and_am", "vesicle_or_spore_ves_and_arb", "lse", "coil",
-"olpidium",	"mold", "plasmodiophorids",	"dot_line",	"non_am",	"fine_endo")
+columns_to_convert <- c("am_hyphae_dse_and_am","arb_ves_and_arb", "dse_dse_and_am", "vesicle_or_spore_ves_and_arb", "lse", "coil","fine_endo")
 
 ds <- ds %>%
   mutate(across(all_of(columns_to_convert), 
@@ -335,7 +784,7 @@ p <- ggplot(heatmap_df, aes(x = variable_pretty, y = genotype, fill = effect)) +
     y = "Genotype",
     title = "Drought Response Across Genotypes",
     subtitle = "Standardized differences between drought and watered treatments",
-    caption = "Significance: *** p ≤ 0.001, ** p ≤ 0.01, * p ≤ 0.05\nOnly genotypes with ≥3 replicates per treatment shown"
+    caption = "Significance: *** p ≤ 0.001, ** p ≤ 0.01, * p ≤ 0.05"
   ) +
   theme_minimal() +
   theme(
@@ -345,7 +794,7 @@ p <- ggplot(heatmap_df, aes(x = variable_pretty, y = genotype, fill = effect)) +
     plot.caption = element_text(size = 9, color = "gray50", hjust = 0),
     
     # Axis styling
-    axis.text.x.top = element_text(angle = 45, hjust = 0, vjust = 0, size = 10, face = "bold"),
+    axis.text.x.top = element_text(angle = 15, hjust = .2, vjust = 0, size = 10, face = "bold"),
     axis.text.y = element_text(size = 10, face = "bold"),
     axis.title.y = element_text(size = 12, face = "bold", margin = margin(r = 10)),
     
@@ -367,7 +816,7 @@ p <- ggplot(heatmap_df, aes(x = variable_pretty, y = genotype, fill = effect)) +
     panel.background = element_rect(fill = "white", color = NA)
   )
 
-print(p)
+p
 
 # Optional: Save high-quality version
 ggsave("drought_response_heatmap.png", plot = p, width = 14, height = 8, dpi = 300, bg = "white")
@@ -632,12 +1081,21 @@ loadings_with_strength <- loadings_df %>%
     )
   )
 
-#code for the plot
-p1_selective <- ggplot(pca_df, aes(x = PC1, y = PC2)) +
+genotypes_to_plot <- c("156203", "157033", "181080", "181083", "641815", "E29W1")
+
+pca_df_filtered <- pca_df %>%
+  filter(genotype %in% genotypes_to_plot)
+
+# Compute ellipse label positions (center of each treatment group)
+ellipse_labels <- pca_df_filtered %>%
+  group_by(treatment) %>%
+  summarise(PC1 = mean(PC1), PC2 = mean(PC2), .groups = "drop")
+
+
+p1_selective <- ggplot(pca_df_filtered, aes(x = PC1, y = PC2)) +
   stat_ellipse(aes(color = treatment), 
                alpha = 0.3, type = "norm", level = 0.68, linewidth = 1) +
-  geom_point(aes(color = treatment, shape = treatment), size = 1.5, alpha = 0.8) +
-  # Arrows with variable thickness based on loading strength
+  geom_point(aes(color = genotype, shape = treatment), size = 3, alpha = 0.8)+
   geom_segment(data = loadings_with_strength,
                aes(x = 0, y = 0, xend = PC1_scaled, yend = PC2_scaled,
                    linewidth = arrow_thickness, alpha = arrow_alpha),
@@ -669,15 +1127,17 @@ p1_selective <- ggplot(pca_df, aes(x = PC1, y = PC2)) +
                   point.padding = 0.2,
                   force = 1.5,
                   max.overlaps = Inf) +
-  scale_color_manual(values = c("Droughted" = "#D73027", "Watered" = "#1A9850"),
-                     name = "Treatment") +
-  scale_shape_manual(values = c("Droughted" = 17, "Watered" = 16),
-                     name = "Treatment") +
+                  scale_color_discrete(name = "Genotype") +
+                  #scale_color_manual(values = c(
+                   # "Droughted" = "#D73027",
+                  #  "Watered" = "darkblue" ))
+                  scale_shape_manual(values = c("Droughted" = 17, "Watered" = 16),
+                   name = "Treatment") +
   labs(
     x = paste0("PC1 (", pc1_var, "% variance)"),
     y = paste0("PC2 (", pc2_var, "% variance)"),
-    title = "Principal Component Analysis (Treatment X Genotype)",
-    subtitle = "Plant performance and leaf chemistry",
+    title = "Principal Component Analysis Treatment X Genotype (Preliminary AMF Colonization Genotypes)",
+    subtitle = "Plant performance, chemistry, and fungal colonization traits",
     caption = "Arrow thickness indicates loading strength"
   ) +
   theme_minimal() +
@@ -694,7 +1154,7 @@ p1_selective <- ggplot(pca_df, aes(x = PC1, y = PC2)) +
     plot.caption = element_text(size = 9, color = "gray50")
   )
 
-# creat plot
+# Display the selective approach with variable arrow thickness
 print(p1_selective)
 
 # Print loading strength summary for reference
@@ -729,7 +1189,7 @@ p2 <- ggplot(scree_data, aes(x = PC, y = Variance)) +
     axis.title = element_text(size = 11, face = "bold"),
     axis.text = element_text(size = 9),
     panel.grid.major.x = element_blank(),
-    panel.grid.minor = element_blank(),
+    panel.grid.minor.x = element_blank(),
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8)
   )
 
@@ -1005,11 +1465,8 @@ p1_selective <- ggplot(pca_df_filtered, aes(x = PC1, y = PC2)) +
     plot.caption = element_text(size = 9, color = "gray50")
   )
 
-
 # Display the selective approach with variable arrow thickness
 print(p1_selective)
-
-
 
 # Print loading strength summary for reference
 cat("\nLoading strength summary:\n")
@@ -1043,7 +1500,7 @@ p2 <- ggplot(scree_data, aes(x = PC, y = Variance)) +
     axis.title = element_text(size = 11, face = "bold"),
     axis.text = element_text(size = 9),
     panel.grid.major.x = element_blank(),
-    panel.grid.minor = element_blank(),
+    panel.grid.minor.x = element_blank(),
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8)
   )
 
@@ -1062,183 +1519,6 @@ cat(paste("Cumulative variance (PC1+PC2):", round(pc1_var + pc2_var, 1), "%\n"))
 # Optional: Save plots
 ggsave("pca_biplot.png", plot = p1_selective, width = 12, height = 8, dpi = 300, bg = "white")
 ggsave("pca_scree.png", plot = p2, width = 8, height = 6, dpi = 300, bg = "white")
-
-genotypes_to_plot <- c("156203", "157033", "181080", "181083", "641815", "E29W1")
-
-pca_df_filtered <- pca_df %>%
-  filter(genotype %in% genotypes_to_plot)
-
-# Compute ellipse label positions (center of each treatment group)
-ellipse_labels <- pca_df_filtered %>%
-  group_by(treatment) %>%
-  summarise(PC1 = mean(PC1), PC2 = mean(PC2), .groups = "drop")
-
-
-
-# STEP 1: Diagnose missing data (run this first)
-missing_check <- pca_df %>%
-  filter(genotype %in% genotypes_to_plot) %>%
-  group_by(genotype, treatment) %>%
-  summarise(count = n(), .groups = "drop") %>%
-  pivot_wider(names_from = treatment, values_from = count, values_fill = 0) %>%
-  mutate(missing_drought = ifelse(Droughted == 0, "Missing", "Present"))
-
-print("Missing data check:")
-print(missing_check)
-
-# STEP 2: Find complete genotypes
-complete_genotypes <- pca_df %>%
-  group_by(genotype) %>%
-  summarise(
-    treatments = n_distinct(treatment),
-    has_both = treatments == 2,
-    .groups = "drop"
-  ) %>%
-  filter(has_both) %>%
-  pull(genotype)
-
-print(paste("Complete genotypes:", paste(complete_genotypes, collapse = ", ")))
-
-# STEP 3: Create dataset - using all available data as requested
-pca_df_all_available <- pca_df %>%
-  filter(genotype %in% genotypes_to_plot)
-
-# Use all available data (including incomplete genotypes)
-pca_df_plot <- pca_df_all_available
-
-# Create complete data subset for ellipses (for statistical validity)
-pca_df_complete <- pca_df %>%
-  filter(genotype %in% complete_genotypes)
-
-# STEP 4: Create comprehensive plot using ALL AVAILABLE data
-p1_enhanced <- ggplot(pca_df_plot, aes(x = PC1, y = PC2)) +
-  
-  # Treatment ellipses based on COMPLETE data only (for statistical validity)
-  stat_ellipse(data = pca_df_complete, aes(fill = treatment), 
-               alpha = 0.2, type = "norm", level = 0.68, 
-               linewidth = 1, color = "transparent") +
-  stat_ellipse(data = pca_df_complete, aes(color = treatment), 
-               alpha = 0.8, type = "norm", level = 0.68, 
-               linewidth = 1, fill = "transparent") +
-  
-  # Manual colors for treatment ellipses
-  scale_fill_manual(values = c("Droughted" = "#CC4979", "Watered" = "#40B0A6"), name = "Treatment") +
-  scale_color_manual(values = c("Droughted" = "#CC4979", "Watered" = "#40B0A6"), name = "Treatment") +
-  
-  # Add a new color scale for genotype points
-  ggnewscale::new_scale_color() +
-  
-  # Points for ALL available data (including incomplete genotypes)
-  geom_point(aes(color = genotype, shape = treatment), size = 3.5, alpha = 0.9, stroke = 0.8) +
-  
-  # Highlight incomplete genotypes with white centers and thicker borders
-  geom_point(data = pca_df_plot %>% filter(!genotype %in% complete_genotypes),
-             aes(color = genotype, shape = treatment), 
-             size = .25, alpha = 0.2, stroke = .25, fill = "white") +
-  
-  # Custom colors for genotypes (you can adjust these)
-  scale_color_manual(
-    name = "Genotype",
-    values = c(
-      "156203" = "#CC79A7",   
-      "157033" = "#E69F00",    # Orange  
-      "181080" = "#009E73",    # Green
-      "181083" = "#0072B2",    # Blue
-      "641815" = "#994F00",   
-      "E29W1" = "#F0E442"      # Pink
-    )
-  ) +
-  
-  # Shape scale for treatments
-  scale_shape_manual(values = c("Droughted" = 17, "Watered" = 16), name = "Treatment") +
-  
-  # Loading arrows with variable thickness
-  geom_segment(data = loadings_with_strength,
-               aes(x = 0, y = 0, xend = PC1_scaled, yend = PC2_scaled,
-                   linewidth = arrow_thickness, alpha = arrow_alpha),
-               arrow = arrow(length = unit(0.25, "cm")),
-               color = "gray30", inherit.aes = FALSE) +
-  
-  scale_linewidth_identity() +
-  scale_alpha_identity() +
-  
-  # ALL loading labels - strong ones in bold
-  geom_text_repel(data = loadings_with_strength %>% filter(loading_strength > 0.5),
-                  aes(x = PC1_scaled * 1.15, y = PC2_scaled * 1.15, label = Variable_pretty),
-                  size = 3.8, color = "black", fontface = "bold",
-                  box.padding = 0.8, point.padding = 0.4, force = 4,
-                  inherit.aes = FALSE) +
-  
-  # Medium strength loadings in regular font
-  geom_text_repel(data = loadings_with_strength %>% 
-                    filter(loading_strength <= 0.5 & loading_strength > 0.3),
-                  aes(x = PC1_scaled * 1.1, y = PC2_scaled * 1.1, 
-                      label = Variable_pretty),
-                  size = 3.2, color = "gray20", fontface = "plain",
-                  box.padding = 0.5, point.padding = 0.3, force = 2,
-                  max.overlaps = Inf, inherit.aes = FALSE) +
-  
-  # Weaker loadings in smaller, lighter font
-  geom_text_repel(data = loadings_with_strength %>% 
-                    filter(loading_strength <= 0.3),
-                  aes(x = PC1_scaled * 1.05, y = PC2_scaled * 1.05, 
-                      label = Variable_pretty),
-                  size = 2.5, color = "gray40", fontface = "plain",
-                  box.padding = 0.3, point.padding = 0.2, force = 1,
-                  max.overlaps = Inf, inherit.aes = FALSE) +
-  
-  # Labels and styling
-  labs(
-    x = paste0("PC1 (", pc1_var, "% variance)"),
-    y = paste0("PC2 (", pc2_var, "% variance)"),
-    title = "Treatment × Genotype PCA - Preliminary Colonization Genotypes",
-    subtitle = "Ellipses = complete genotypes only, 5 reps",
-    caption = "Arrow thickness = loading strength | Red ellipse = Droughted, Blue = Watered"
-  ) +
-  
-  # Clean theme
-  theme_minimal() +
-  theme(
-    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray40"),
-    axis.title = element_text(size = 12, face = "bold"),
-    axis.text = element_text(size = 10),
-    legend.title = element_text(size = 11, face = "bold"),
-    legend.text = element_text(size = 9),
-    legend.key.size = unit(0.8, "cm"),
-    panel.grid.minor = element_blank(),
-    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
-    plot.background = element_rect(fill = "white", color = NA),
-    plot.caption = element_text(size = 9, color = "gray50", hjust = 0),
-    legend.box = "horizontal",
-    legend.position = "bottom"
-  ) +
-  
-  # Arrange legends side by side
-  guides(
-    fill = guide_legend(title = "Treatment", override.aes = list(alpha = 0.7, size = 4)),
-    color = guide_legend(title = "Genotype", override.aes = list(size = 4, alpha = 1)),
-    shape = guide_legend(title = "Treatment", override.aes = list(size = 4))
-  )
-
-
-# Display the enhanced plot
-print(p1_enhanced)
-
-# Optional: Save the plot
-ggsave("enhanced_pca_plot.png", plot = p1_enhanced, 
-       width = 14, height = 10, dpi = 300, bg = "white")
-
-print("\n=== ENHANCEMENT SUMMARY ===")
-print("✓ Using ALL available data from your original genotype selection")
-print("✓ Ellipses based on complete genotypes only (for statistical validity)")
-print("✓ White-centered points highlight genotypes with incomplete data")
-print("✓ All variable labels shown (different sizes by loading strength)")
-print("✓ Genotype names in legend with custom colors") 
-print("✓ Red ellipses for Droughted, Blue for Watered")
-print("✓ Treatment shapes in legend")
-
-
 
 #---Boxplots of colonization----
 amf_filtered <- ds %>%
@@ -1281,11 +1561,11 @@ p
 #------Correlating Colonization to Drought Tolerance per Genotype----
 
 # Define colonization variables and drought response variables
-colonization_vars <- c("am_hyphae_rlc", "amf_rlc", "arb_rlc",
-                       "dse_rlc", "vesicle_rlc",
+colonization_vars <- c("amf_rlc", "am_hyphae_dse_and_am_rlc", "arb_ves_and_arb_rlc", 
+                       "dse_dse_and_am_rlc", "vesicle_or_spore_ves_and_arb_rlc", 
                        "lse_rlc", "coil_rlc", "olpidium_rlc", "mold_rlc", 
                        "plasmodiophorids_rlc", "dot_line_rlc", "non_am_rlc", 
-                       "fine_endo_rlc", "amf_hyphae_in_dry_soil_m_g", "dse_hyphae_in_dry_soil_m_g")
+                       "fine_endo_rlc", "amf_in_dry_soil", "dse_in_dry_soil")
 
 drought_response_vars <- c("shoot_wt", "florets", "d13c", "c", "d15n", "n", "p", 
                            "cn_ratio", "np_ratio")
@@ -1539,3 +1819,437 @@ if(exists("cor_long")) {
   cat("\nCorrelation results exported to 'colonization_drought_correlations.csv'\n")
 }
 
+
+
+
+
+
+
+#---Preliminary Linear Model
+str(ds)
+
+# Look at the distribution of samples for each factor
+table(ds[ , c("treatment", "genotype")])
+
+#remove na's for the variables of interest
+ds <- ds %>%
+  filter(!is.na(sprout_or_transplant_to_harvest
+) & !is.na(total_biomass))
+
+# Look at the distribution of continuous variables:
+par(mfrow = c(1, 2), mar = c(4, 4, 1, 1))
+hist(ds$sprout_or_transplant_to_harvest, xlab = "sprout_or_transplant_to_harvest", 
+main = "")
+hist(ds$total_biomass, xlab = "total_biomass", main = "")
+
+# Standardized total_biomass, "by hand"
+ds$Z_tot <- (ds$total_biomass - mean(ds$total_biomass)) / 
+                      sd(ds$total_biomass)
+
+hist(ds$Z_tot, xlab = "Z_tot", main = "")
+
+
+# Standardized age, with the function scale
+ds$Z_sprout_or_transplant_to_harvest <- scale(ds$sprout_or_transplant_to_harvest)
+
+hist(ds$Z_sprout_or_transplant_to_harvest, xlab = "Z_sprout_or_transplant_to_harvest", main = "")
+
+## Create a linear model without random effects
+lm.test <- lm(Z_tot ~ Z_sprout_or_transplant_to_harvest, data = ds)
+summary(lm.test)
+
+## plot the data with ggplot
+prelim_plot <- ggplot(ds, aes(x = Z_sprout_or_transplant_to_harvest, y = Z_tot, color = treatment)) +
+  geom_point() + theme_bw()+
+  geom_smooth(method = "lm", se=FALSE)+
+    facet_wrap(~genotype)
+prelim_plot
+
+prelim_plot <- ggplot(ds, aes(x = sprout_or_transplant_to_harvest, y = total_biomass, color = treatment)) +
+  geom_point() + theme_bw()+
+  geom_smooth(method = "lm", se=FALSE)
+prelim_plot
+
+prelim_plot <- ggplot(ds, aes(x = num_of_plants, y = total_biomass, color = treatment)) +
+  geom_point() + theme_bw()+
+  geom_smooth(method = "lm", se=FALSE)+ 
+  facet_wrap(~genotype)
+prelim_plot
+
+
+## Calculate residuals of this linear model
+lm.test.resid <- rstandard(lm.test)
+
+M.gls <- gls(Z_tot ~ Z_sprout_or_transplant_to_harvest, data = ds)
+
+plot(lm.test.resid ~ as.factor(ds$genotype),
+     xlab = "genotype", ylab = "Standardized residuals")+ abline(0, 0, lty = 2)
+
+
+library(nlme)
+M1.lme= lme(Z_tot ~ Z_sprout_or_transplant_to_harvest, random=~1|treatment, 
+     data = ds, method="REML")
+
+# Now add random effects
+M1.lmer <- lmer(Z_tot ~ Z_sprout_or_transplant_to_harvest + (1 | genotype), data = ds)
+              
+summary(M1.lmer)
+
+
+anova(M.gls, M1.lme)
+
+
+# Plot predicted values vs residual values
+par(mar = c(4, 4, 0.5, 0.5))
+plot(resid(M1.lme) ~ fitted(M1.lme), xlab = "Predicted values", ylab = "Normalized residuals")
+abline(h = 0, lty = 2)
+
+# In order to check the independence of the model residuals
+# we need to plot residuals vs each covariate of the model
+
+plot(resid(M1.lme) ~ ds$Z_tot, xlab = "Z_tot", ylab = "Normalized residuals")+abline(h = 0, lty = 2)
+
+boxplot(resid(M1.lme) ~ treatment, data = ds, xlab = "treatment", ylab = "Normalized residuals") 
+
+boxplot(resid(M1.lme) ~ genotype, data = ds, xlab = "genotype",
+    ylab = "Normalized residuals")
+
+hist(resid(M1.lme))
+
+re <- ranef(M1.lmer, condVar = TRUE)
+re_df <- as.data.frame(re$treatment)
+ggplot(re_df, aes(sample = `(Intercept)`)) +
+  stat_qq() + stat_qq_line() +
+  labs(title = "QQ-plot of treatment random intercepts")
+
+re <- ranef(M1.lmer, condVar = TRUE)
+re_df <- as.data.frame(re$genotype)
+ggplot(re_df, aes(sample = `(Intercept)`)) +
+  stat_qq() + stat_qq_line() +
+  labs(title = "QQ-plot of treatment random intercepts")
+
+library(performance)
+check_model(M1.lme)
+check_model(M1.lmer)
+
+
+isSingular(M1.lmer)
+
+summary(M1.lme)
+
+
+M1.lme= lme(Z_sprout_or_transplant_to_harvest ~ Z_tot, random=~1|treatment, 
+     data = ds, method="ML")
+
+M2.lme= lme(Z_sprout_or_transplant_to_harvest ~ 1, random=~1|treatment, 
+     data = ds, method="ML")
+
+anova(M1.lme, M2.lme)
+
+
+M1.lme= lme(Z_sprout_or_transplant_to_harvest ~ Z_tot, random=~1|genotype, 
+     data = ds, method="REML")
+summary(M1.lme)
+
+# ggplot theme
+
+fig <- theme_bw() + theme(panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(), panel.background = element_blank()) +
+    theme(strip.background = element_blank(), strip.text.y = element_text()) +
+    theme(legend.background = element_blank()) + theme(legend.key = element_blank()) +
+    theme(panel.border = element_rect(colour = "black", fill = NA))
+
+library(ggeffects)  # install the package first if you haven't already, then load it
+
+# Extract the prediction data frame
+pred.mm <- ggpredict(M1.lme, terms = c("Z_tot"))  # this gives overall predictions for the model
+head(pred.mm)
+
+# Plot the predictions 
+
+ggplot(pred.mm) + 
+   geom_line(aes(x = x, y = predicted)) +          # slope
+   geom_ribbon(aes(x = x, ymin = predicted - std.error, ymax = predicted + std.error), 
+               fill = "lightgrey", alpha = 0.5) +  # error band
+   geom_point(data = ds,                      # adding the raw data (scaled values)
+              aes(x = Z_tot, y = Z_sprout_or_transplant_to_harvest, colour = treatment)) + 
+   labs(x = "tot wt", y = "sprout_or_transplant_to_harvest", 
+        title = "All data") + 
+   fig
+
+install.packages("MuMIn")
+library(MuMIn)
+r.squaredGLMM(M1.lme)
+
+
+M.randslope <- lme(Z_sprout_or_transplant_to_harvest ~ Z_tot,
+                   random = ~ Z_tot | genotype,
+                   data = ds,
+                   method = "REML")
+
+anova(M1.lme, M.randslope)
+
+
+m3 <- lmer((total_biomass) ~ (treatment) + (genotype) + (1 | sprout_or_transplant_to_harvest) + (1| rep) , data = ds)
+summary(m3)
+
+
+Mbea <- lmer((total_biomass) ~ (treatment) + (genotype) +  (1| rep) + (1 | sprout_or_transplant_to_harvest) + (1 | purpleness), data = ds)
+summary(Mbea) 
+
+names(ds)
+
+p <- ggplot(ds, aes(x = total_biomass, y = numeric_pt)) +
+  geom_boxplot(aes(fill = genotype), 
+               alpha = 0.1, outlier.shape = NA) +
+  geom_jitter(aes(color = genotype), 
+              width = 0.2, size = 1.8, alpha = 1) +
+  facet_grid(~treatment, scales = "free_x", space = "free_x") +  # keep treatments aligned
+  stat_n_text() +
+  #labs(y = "AMF Root Length Colonized (%)", x = "") +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    axis.title.x = element_blank(),
+    axis.text.x  = element_blank(),
+    legend.position = "top",
+    legend.title = element_blank(),
+    panel.spacing = unit(1, "lines"),   # spacing between panels
+    panel.border = element_rect(color = "black", fill = NA)  # border around each facet
+  )
+p
+
+p <- ggplot(ds, aes(x = purpleness, y = numeric_pt)) +
+  geom_point(aes(color = genotype), size = 2, alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linetype = "dashed") +
+  facet_wrap(~treatment) +
+  #labs(x = "Total Biomass", y = "Days to Harvest") +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "none",
+    legend.title = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA)
+  )
+p
+
+view(ds)
+
+
+# Option A: treat num_of_plants and sprout_or_transplant_to_harvest as random effects
+m1 <- lmer(total_biomass ~ treatment * genotype +
+             (1 | rep) +
+             (1 | num_of_plants) +
+             (1 | sprout_or_transplant_to_harvest),
+           data = ds)
+
+# Option B: treat them as covariates (fixed effects)
+m2 <- lmer(dry_root_wt ~ treatment * genotype
+             + sprout_or_transplant_to_harvest +
+             (1 | rep),
+           data = ds)
+
+# Check models
+summary(m1)
+summary(m2)
+
+# Compare fit
+anova(m1, m2)
+
+library(performance)
+
+check_model(m2)
+
+library(ggplot2)
+
+ggplot(ds, aes(x = sprout_or_transplant_to_harvest, y = dry_root_wt)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", color = "blue") +
+  labs(
+    x = "Days from sprout/transplant to harvest",
+    y = "Dry root weight (g)",
+    title = "Dry root weight vs. harvest age"
+  ) +
+  theme_minimal()
+  
+  ggplot(ds, aes(x = sprout_or_transplant_to_harvest, y = dry_root_wt, color = treatment)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_minimal()
+
+dredge(  m2 )
+
+na.omit(ds)
+library(MuMIn)
+library(lme4)
+library(lmerTest)
+library(nlme)
+
+GGally::ggpairs(ds[, c("total_biomass", "dry_root_wt", "sprout_or_transplant_to_harvest", "num_of_plants", "rep")])
+#col test
+# Fit a simple model with all predictors for collinearity check
+col_test <- lm(dry_root_wt ~ treatment + genotype
+             + sprout_or_transplant_to_harvest, data = ds)
+
+performance::check_collinearity(col_test)
+
+
+cor(ds[, c("total_biomass", "dry_root_wt", "sprout_or_transplant_to_harvest", "num_of_plants", "rep")], use = "pairwise.complete.obs")    
+pairs(ds[, c("total_biomass", "dry_root_wt", "sprout_or_transplant_to_harvest", "num_of_plants", "rep")], upper.panel = NULL)   
+library(car)
+vif(m2)
+
+lm1 <- lm(dry_root_wt ~ treatment + genotype + sprout_or_transplant_to_harvest, data = ds)
+summary(lm1)
+
+
+# Load needed libraries
+library(nlme)
+library(performance)
+library(sjPlot)
+library(ggplot2)
+library(ggeffects)
+
+# 1️⃣ Fit GLS model (if not already done)
+gls1 <- gls(dry_root_wt ~ treatment + genotype + sprout_or_transplant_to_harvest,
+            data = ds,
+            method = "REML",
+            na.action = na.exclude)
+
+# 2️⃣ Fit LME model with replicate as random effect
+lme1 <- lme(dry_root_wt ~ treatment + genotype + sprout_or_transplant_to_harvest,
+            random = ~ 1 | rep,
+            data = ds,
+            method = "REML",
+            na.action = na.exclude)
+
+# 3️⃣ Compare GLS vs LME with ML
+gls1_ml <- update(gls1, method = "ML")
+lme1_ml <- update(lme1, method = "ML")
+anova(gls1_ml, lme1_ml)
+
+# 4️⃣ Diagnostic check
+check_model(lme1)
+
+# 5️⃣ Likelihood-ratio tests for fixed effects
+drop1(lme1_ml, test = "Chisq")
+
+# 6️⃣ Final model (simplified to genotype only, using REML)
+lme_final <- update(lme1, fixed = dry_root_wt ~ treatment + genotype + sprout_or_transplant_to_harvest,
+                    random = ~ 1 | rep,
+                    method = "REML")
+summary(lme_final)
+check_model(lme_final)
+
+# 7️⃣ Present results
+tab_model(lme_final, show.se = TRUE)
+
+
+# Get predicted values from the model
+lmer_final <- lmer(dry_root_wt ~ genotype + sprout_or_transplant_to_harvest + (1 | rep),
+                   data = ds,
+                   REML = TRUE)
+
+
+lmer_final <- na.action(lmer_final, na.exclude)
+
+pred <- ggpredict(lmer_final, terms = "sprout_or_transplant_to_harvest")
+plot(pred, show_data = TRUE) +
+  labs(x = "Sprout or Transplant to Harvest (days)",
+       y = "Dry Root Weight (g)",
+       title = "Predicted relationship between plant age and dry root weight") +
+  theme_minimal()
+
+library(MASS)
+step_model <- stepAIC(lme1_ml, direction = "backward")
+summary(step_model)
+
+library(lme4)
+library(MuMIn)
+
+# Refit with ML
+lmer_final_ml <- update(lmer_final, REML = FALSE)
+
+# Run dredge for model selection
+all_models <- dredge(lmer_final_ml)
+# View the top models
+all_models
+
+# Top 5 models by AICc
+head(all_models, 5)
+
+# Best model------------------------------------------
+best_model <- get.models(all_models, 1)[[1]]
+summary(best_model)
+
+library(nlme)
+library(MuMIn)
+
+lme_ml <- update(lme1, method = "ML")
+
+all_models <- dredge(lme_ml, na.action = na.exclude)
+all_models
+
+# Average only models within delta < 4
+avg_model <- model.avg(all_models, subset = delta < 4)
+summary(avg_model)
+
+performance(lme_final)
+
+set.seed(123)
+performance_cv(lme_final, method = "k_fold", k = 5, stack = FALSE)
+
+library(lme4)
+
+set.seed(123)
+
+
+
+
+
+# Number of folds
+k <- 5
+
+# Get unique groups and randomly assign them to folds
+groups <- unique(ds$rep)
+fold_assignments <- sample(rep(1:k, length.out = length(groups)))
+names(fold_assignments) <- groups
+
+# Data frame to store results
+cv_results <- data.frame(Fold = integer(), R2 = numeric(), RMSE = numeric())
+
+# Loop through folds
+for (fold in 1:k) {
+  
+  # Identify test and train groups
+  test_groups <- names(fold_assignments[fold_assignments == fold])
+  train_data <- ds[!ds$rep %in% test_groups, ]
+  test_data  <- ds[ds$rep %in% test_groups, ]
+  
+  # Fit the mixed model on the training data
+  model <- lmer(dry_root_wt ~ genotype + sprout_or_transplant_to_harvest + (1|rep),
+                data = train_data)
+  
+  # Predict on the test data
+  preds <- predict(model, newdata = test_data, allow.new.levels = TRUE)
+  
+  # Calculate R² and RMSE for this fold
+  ss_res <- sum((test_data$dry_root_wt - preds)^2)
+  ss_tot <- sum((test_data$dry_root_wt - mean(test_data$dry_root_wt))^2)
+  r2 <- 1 - (ss_res / ss_tot)
+  rmse <- sqrt(mean((test_data$dry_root_wt - preds)^2))
+  
+  # Store results
+  cv_results <- rbind(cv_results, data.frame(Fold = fold, R2 = r2, RMSE = rmse))
+}
+
+# Average performance across folds
+cv_summary <- data.frame(
+  Mean_R2 = mean(cv_results$R2),
+  SD_R2   = sd(cv_results$R2),
+  Mean_RMSE = mean(cv_results$RMSE),
+  SD_RMSE   = sd(cv_results$RMSE)
+)
+
+cv_results
+```

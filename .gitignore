@@ -1,0 +1,19 @@
+# system junk
+Thumbs.db
+
+# VS Code local settings
+.vscode/
+
+# Excel temporary files
+~$*.xlsx
+
+# raw Excel data
+*.xlsx
+
+# generated figures
+plots/
+
+# R session files
+.Rhistory
+.RData
+.Rproj.user/

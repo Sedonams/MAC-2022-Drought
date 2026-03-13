@@ -172,12 +172,11 @@ p <- ggplot(heatmap_df, aes(x = variable_pretty, y = genotype, fill = effect)) +
 p
 
 # Optional: Save high-quality version
-ggsave("drought_response_heatmap_simple.png", plot = p, width = 14, height = 8, dpi = 300, bg = "white")
+#ggsave("drought_response_heatmap_simple.png", plot = p, width = 14, height = 8, dpi = 300, bg = "white")
 
 
 
 #------Drought Response Heatmap for Colonization----
-
 vars <- c("amf_rlc", "am_hyphae_dse_and_am_rlc","arb_ves_and_arb_rlc", "dse_dse_and_am_rlc",
           "vesicle_or_spore_ves_and_arb_rlc", "lse_rlc", "coil_rlc",
           "olpidium_rlc",	"mold_rlc", "plasmodiophorids_rlc",	"dot_line_rlc",	"non_am_rlc",	

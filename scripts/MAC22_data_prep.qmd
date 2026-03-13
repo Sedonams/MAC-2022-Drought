@@ -43,6 +43,7 @@ for (col in date_cols) {
 }
 
 colnames(dmgr)
+View(dmgr)
 ```
 
 onto the amf scoring tab cleanup
@@ -54,6 +55,7 @@ columns_to_convert <- c("am_hyphae", "arb", "dse", "vesicle", "lse",
 amf <- read_xlsx("data/MAC 2022 Mother.xlsx", sheet = "AMF Score") %>%
   clean_names() %>%
   rename(treatment = treat) %>%
+  filter(!is.na(amf_rlc) & amf_rlc != 0) %>%
   mutate(genotype = stringr::str_replace(as.character(genotype), "\\.0$", ""),
          position = as.integer(position),
          non_am = rowSums(dplyr::select(., olpidium, mold,
@@ -62,7 +64,7 @@ amf <- read_xlsx("data/MAC 2022 Mother.xlsx", sheet = "AMF Score") %>%
          arb = rowSums(dplyr::select(., arb, ves_and_arb),
                        na.rm = TRUE),
          vesicle =
-           rowSums(dplyr::select(., vesicle_or_spore, ves_and_arb),
+           rowSums(dplyr::select(., vesicle, ves_and_arb),
                    na.rm = TRUE),
          am_hyphae =
            rowSums(dplyr::select(., course_am_hyphae, dse_and_am),
@@ -152,5 +154,6 @@ View(ds)
 
 ```{r,warning=FALSE,message=FALSE}
 write.csv(ds, "data/MAC22_cleaned.csv", row.names = FALSE)
+write.csv(dmgr, "data/dmgr_cleaned.csv", row.names = FALSE)
 ```
 ds %>% group_by(genotype) %>% tally() %>% filter(n < 5) Cool. what is this

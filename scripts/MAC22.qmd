@@ -57,6 +57,17 @@ geno_summary <- ds %>%
     .groups = "drop"
   )
 
+
+ggplot(geno_summary, aes(mean_rlc, mean_shoot, color = treatment)) +
+  geom_point(size = 4) +
+  geom_smooth(method = "lm", se = FALSE, linewidth = 1.2) +
+  theme_classic(base_size = 14) +
+  labs(
+    x = "Mean AMF Colonization (%)",
+    y = "Mean Shoot Biomass (g)",
+    color = "Treatment"
+  )
+
 m <- lmer(
   tot_shoot_wtg ~ amf_rlc * treatment + genotype + (1|rep),
   data = ds)
@@ -84,15 +95,78 @@ ggplot() +
     fill = "Treatment")
 
 
-ggplot(geno_summary, aes(mean_rlc, mean_shoot, color = treatment)) +
-  geom_point(size = 4) +
-  geom_smooth(method = "lm", se = FALSE, linewidth = 1.2) +
+
+
+geno_summary <- ds %>%
+  group_by(genotype, treatment) %>%
+  summarise(
+    mean_shoot = mean(tot_shoot_wtg, na.rm = TRUE),
+    mean_vesicle = mean(vesicle_rlc, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+m <- lmer(
+  tot_shoot_wtg ~ vesicle_rlc * treatment + genotype + (1|rep),
+  data = ds)
+
+pred <- ggpredict(m, terms = c("vesicle_rlc", "treatment"))
+
+ggplot() +
+  geom_point(data = geno_summary,
+             aes(mean_vesicle, mean_shoot, color = treatment),
+             alpha = 0.5) +
+
+  geom_ribbon(data = pred,
+              aes(x = x, ymin = conf.low, ymax = conf.high, fill = group),
+              alpha = 0.25) +
+
+  geom_line(data = pred,
+            aes(x = x, y = predicted, color = group),
+            linewidth = 1.3) +
+
   theme_classic(base_size = 14) +
   labs(
-    x = "Mean AMF Colonization (%)",
-    y = "Mean Shoot Biomass (g)",
-    color = "Treatment"
+    x = "Mean Vesicle Root Length Colonized (%)",
+    y = "Mean Total Shoot Biomass (g)",
+    color = "Treatment",
+    fill = "Treatment")
+
+
+
+geno_summary <- ds %>%
+  group_by(genotype, treatment) %>%
+  summarise(
+    mean_shoot = mean(tot_shoot_wtg, na.rm = TRUE),
+    mean_arb = mean(arb_rlc, na.rm = TRUE),
+    .groups = "drop"
   )
+
+m <- lmer(
+  tot_shoot_wtg ~ arb_rlc * treatment + genotype + (1|rep),
+  data = ds)
+
+pred <- ggpredict(m, terms = c("arb_rlc", "treatment"))
+
+ggplot() +
+  geom_point(data = geno_summary,
+             aes(mean_arb, mean_shoot, color = treatment),
+             alpha = 0.5) +
+
+  geom_ribbon(data = pred,
+              aes(x = x, ymin = conf.low, ymax = conf.high, fill = group),
+              alpha = 0.25) +
+
+  geom_line(data = pred,
+            aes(x = x, y = predicted, color = group),
+            linewidth = 1.3) +
+
+  theme_classic(base_size = 14) +
+  labs(
+    x = "Mean Arbuscule Root Length Colonized (%)",
+    y = "Mean Total Shoot Biomass (g)",
+    color = "Treatment",
+    fill = "Treatment")
+
 
 drought_perf <- geno_summary %>%
   filter(treatment == "Droughted") %>%

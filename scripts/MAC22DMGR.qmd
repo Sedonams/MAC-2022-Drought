@@ -66,19 +66,19 @@ for (col in date_cols) {
   }
 }
 
-ds$sprout_or_transplant_to_harvest <- ds$sprout_or_transplant_to_harvest %>%
+ds$age <- ds$age %>%
   as.integer()
 
 str(ds)
 colnames(ds)
 
 dotchart(ds$total_biomass, group = factor(ds$treatment))
-boxplot(dry_root_wt ~ sprout_or_transplant_to_harvest:treatment, data = ds)
+boxplot(dry_root_wt ~ age:treatment, data = ds)
 boxplot(total_biomass_by_num ~ genotype:treatment, data = ds)
 boxplot(total_biomass ~ genotype:treatment, data = ds)
 
 # Linear model for total biomass by genotype and treatment
-m <- lm(ds$total_biomass ~ ds$sprout_or_transplant_to_harvest)
+m <- lm(ds$total_biomass ~ ds$age)
 #Type ‘m’ to look at the model coefficients.
 m
 str(m)
@@ -94,7 +94,7 @@ plot(n$residuals ~ n$fitted.values)
 
 library(car)
 ds$treatment <- as.factor(ds$treatment)
-leveneTest(total_biomass ~ sprout_or_transplant_to_harvest, data = ds)
+leveneTest(total_biomass ~ age, data = ds)
 plot(m) # Example: plot residuals
 plot(n) # Example: plot residuals
 shapiro.test(m$residuals) 
@@ -146,7 +146,7 @@ if(length(influential) > 0) {
 
 ############################
 #trying somthing
-MAC22_MLM_total_biomass <- lmer(total_biomass ~ treatment * genotype + sprout_or_transplant_to_harvest +(1|num_of_plants) + (1|rep), data = ds)
+MAC22_MLM_total_biomass <- lmer(total_biomass ~ treatment * genotype + age +(1|num_of_plants) + (1|rep), data = ds)
 plot(residuals(MAC22_MLM_total_biomass)) # Example: plot residuals
 plot(MAC22_MLM_total_biomass)
 #
@@ -190,11 +190,11 @@ plot(ds)
 library(car)
 
 # Check for multicollinearity using Variance Inflation Factor (VIF)
-m <- lm(data=ds, total_biomass ~ treatment + genotype + num_of_plants + sprout_or_transplant_to_harvest )
+m <- lm(data=ds, total_biomass ~ treatment + genotype + num_of_plants + age )
 vif(m)
 
-plot(data=ds, sprout_or_transplant_to_harvest~total_biomass)
-M.loess <- lm(sprout_or_transplant_to_harvest~total_biomass, data = ds)
+plot(data=ds, age~total_biomass)
+M.loess <- lm(age~total_biomass, data = ds)
 Fit <- fitted(M.loess)
 head(Fit)
 lines(x = ds$total_biomass, y = Fit)
@@ -277,22 +277,22 @@ anova(model3)
 
 
 
-model4 <- lm(total_biomass ~ sprout_or_transplant_to_harvest * treatment, data = ds)
+model4 <- lm(total_biomass ~ age * treatment, data = ds)
 summary(model4)
 anova(model4)
 # Type III ANOVA to assess main effects while accounting for interaction
 Anova(model4, type = 3)
-plot_model(model4, type = "pred", terms = c("sprout_or_transplant_to_harvest", "treatment"))
+plot_model(model4, type = "pred", terms = c("age", "treatment"))
 
 library(emmeans)
 # Estimate slope for each sex group and test if slopes differ
-slope_tests <- emtrends(model4, ~ treatment, var = "sprout_or_transplant_to_harvest")
+slope_tests <- emtrends(model4, ~ treatment, var = "age")
 
 # Compare slopes between sexes (test interaction)
 pairs(slope_tests)
 test(slope_tests)
 
-model5 <- lm(total_biomass ~ treatment + genotype + num_of_plants + sprout_or_transplant_to_harvest, data = ds)
+model5 <- lm(total_biomass ~ treatment + genotype + num_of_plants + age, data = ds)
 summary(model5)
 Anova(model5, type=2)
 
@@ -308,8 +308,8 @@ ggplot(pred, aes(x = x, y = predicted)) +
 
 
 
-ds1 <- ds %>% mutate(across(c(sprout_or_transplant_to_harvest, num_of_plants), list(s = scale)))
-model7 <- lm(total_biomass ~ sprout_or_transplant_to_harvest_s + num_of_plants_s, data = ds1)
+ds1 <- ds %>% mutate(across(c(age, num_of_plants), list(s = scale)))
+model7 <- lm(total_biomass ~ age_s + num_of_plants_s, data = ds1)
 summary(model7)
 car::vif(model7)
 
@@ -328,7 +328,7 @@ car::vif(model7)
 # Pairwise relationships between key numeric variables
 numeric_vars <- ds %>%
   dplyr::select(dry_root_wt, shoot_wt, total_biomass, 
-  sprout_or_transplant_to_harvest, num_of_plants) %>%
+  age, num_of_plants) %>%
   # Remove any rows with all NA values
   filter(rowSums(!is.na(.)) > 0)
 
@@ -1823,12 +1823,12 @@ table(ds[ , c("treatment", "genotype")])
 
 #remove na's for the variables of interest
 ds <- ds %>%
-  filter(!is.na(sprout_or_transplant_to_harvest
+  filter(!is.na(age
 ) & !is.na(total_biomass))
 
 # Look at the distribution of continuous variables:
 par(mfrow = c(1, 2), mar = c(4, 4, 1, 1))
-hist(ds$sprout_or_transplant_to_harvest, xlab = "sprout_or_transplant_to_harvest", 
+hist(ds$age, xlab = "age", 
 main = "")
 hist(ds$total_biomass, xlab = "total_biomass", main = "")
 
@@ -1840,22 +1840,22 @@ hist(ds$Z_tot, xlab = "Z_tot", main = "")
 
 
 # Standardized age, with the function scale
-ds$Z_sprout_or_transplant_to_harvest <- scale(ds$sprout_or_transplant_to_harvest)
+ds$Z_age <- scale(ds$age)
 
-hist(ds$Z_sprout_or_transplant_to_harvest, xlab = "Z_sprout_or_transplant_to_harvest", main = "")
+hist(ds$Z_age, xlab = "Z_age", main = "")
 
 ## Create a linear model without random effects
-lm.test <- lm(Z_tot ~ Z_sprout_or_transplant_to_harvest, data = ds)
+lm.test <- lm(Z_tot ~ Z_age, data = ds)
 summary(lm.test)
 
 ## plot the data with ggplot
-prelim_plot <- ggplot(ds, aes(x = Z_sprout_or_transplant_to_harvest, y = Z_tot, color = treatment)) +
+prelim_plot <- ggplot(ds, aes(x = Z_age, y = Z_tot, color = treatment)) +
   geom_point() + theme_bw()+
   geom_smooth(method = "lm", se=FALSE)+
     facet_wrap(~genotype)
 prelim_plot
 
-prelim_plot <- ggplot(ds, aes(x = sprout_or_transplant_to_harvest, y = total_biomass, color = treatment)) +
+prelim_plot <- ggplot(ds, aes(x = age, y = total_biomass, color = treatment)) +
   geom_point() + theme_bw()+
   geom_smooth(method = "lm", se=FALSE)
 prelim_plot
@@ -1870,18 +1870,18 @@ prelim_plot
 ## Calculate residuals of this linear model
 lm.test.resid <- rstandard(lm.test)
 
-M.gls <- gls(Z_tot ~ Z_sprout_or_transplant_to_harvest, data = ds)
+M.gls <- gls(Z_tot ~ Z_age, data = ds)
 
 plot(lm.test.resid ~ as.factor(ds$genotype),
      xlab = "genotype", ylab = "Standardized residuals")+ abline(0, 0, lty = 2)
 
 
 library(nlme)
-M1.lme= lme(Z_tot ~ Z_sprout_or_transplant_to_harvest, random=~1|treatment, 
+M1.lme= lme(Z_tot ~ Z_age, random=~1|treatment, 
      data = ds, method="REML")
 
 # Now add random effects
-M1.lmer <- lmer(Z_tot ~ Z_sprout_or_transplant_to_harvest + (1 | genotype), data = ds)
+M1.lmer <- lmer(Z_tot ~ Z_age + (1 | genotype), data = ds)
               
 summary(M1.lmer)
 
@@ -1928,16 +1928,16 @@ isSingular(M1.lmer)
 summary(M1.lme)
 
 
-M1.lme= lme(Z_sprout_or_transplant_to_harvest ~ Z_tot, random=~1|treatment, 
+M1.lme= lme(Z_age ~ Z_tot, random=~1|treatment, 
      data = ds, method="ML")
 
-M2.lme= lme(Z_sprout_or_transplant_to_harvest ~ 1, random=~1|treatment, 
+M2.lme= lme(Z_age ~ 1, random=~1|treatment, 
      data = ds, method="ML")
 
 anova(M1.lme, M2.lme)
 
 
-M1.lme= lme(Z_sprout_or_transplant_to_harvest ~ Z_tot, random=~1|genotype, 
+M1.lme= lme(Z_age ~ Z_tot, random=~1|genotype, 
      data = ds, method="REML")
 summary(M1.lme)
 
@@ -1962,8 +1962,8 @@ ggplot(pred.mm) +
    geom_ribbon(aes(x = x, ymin = predicted - std.error, ymax = predicted + std.error), 
                fill = "lightgrey", alpha = 0.5) +  # error band
    geom_point(data = ds,                      # adding the raw data (scaled values)
-              aes(x = Z_tot, y = Z_sprout_or_transplant_to_harvest, colour = treatment)) + 
-   labs(x = "tot wt", y = "sprout_or_transplant_to_harvest", 
+              aes(x = Z_tot, y = Z_age, colour = treatment)) + 
+   labs(x = "tot wt", y = "age", 
         title = "All data") + 
    fig
 
@@ -1972,7 +1972,7 @@ library(MuMIn)
 r.squaredGLMM(M1.lme)
 
 
-M.randslope <- lme(Z_sprout_or_transplant_to_harvest ~ Z_tot,
+M.randslope <- lme(Z_age ~ Z_tot,
                    random = ~ Z_tot | genotype,
                    data = ds,
                    method = "REML")
@@ -1980,11 +1980,11 @@ M.randslope <- lme(Z_sprout_or_transplant_to_harvest ~ Z_tot,
 anova(M1.lme, M.randslope)
 
 
-m3 <- lmer((total_biomass) ~ (treatment) + (genotype) + (1 | sprout_or_transplant_to_harvest) + (1| rep) , data = ds)
+m3 <- lmer((total_biomass) ~ (treatment) + (genotype) + (1 | age) + (1| rep) , data = ds)
 summary(m3)
 
 
-Mbea <- lmer((total_biomass) ~ (treatment) + (genotype) +  (1| rep) + (1 | sprout_or_transplant_to_harvest) + (1 | purpleness), data = ds)
+Mbea <- lmer((total_biomass) ~ (treatment) + (genotype) +  (1| rep) + (1 | age) + (1 | purpleness), data = ds)
 summary(Mbea) 
 
 names(ds)
@@ -2026,16 +2026,16 @@ p
 view(ds)
 
 
-# Option A: treat num_of_plants and sprout_or_transplant_to_harvest as random effects
+# Option A: treat num_of_plants and age as random effects
 m1 <- lmer(total_biomass ~ treatment * genotype +
              (1 | rep) +
              (1 | num_of_plants) +
-             (1 | sprout_or_transplant_to_harvest),
+             (1 | age),
            data = ds)
 
 # Option B: treat them as covariates (fixed effects)
 m2 <- lmer(dry_root_wt ~ treatment * genotype
-             + sprout_or_transplant_to_harvest +
+             + age +
              (1 | rep),
            data = ds)
 
@@ -2052,7 +2052,7 @@ check_model(m2)
 
 library(ggplot2)
 
-ggplot(ds, aes(x = sprout_or_transplant_to_harvest, y = dry_root_wt)) +
+ggplot(ds, aes(x = age, y = dry_root_wt)) +
   geom_point(alpha = 0.6) +
   geom_smooth(method = "lm", color = "blue") +
   labs(
@@ -2062,7 +2062,7 @@ ggplot(ds, aes(x = sprout_or_transplant_to_harvest, y = dry_root_wt)) +
   ) +
   theme_minimal()
   
-  ggplot(ds, aes(x = sprout_or_transplant_to_harvest, y = dry_root_wt, color = treatment)) +
+  ggplot(ds, aes(x = age, y = dry_root_wt, color = treatment)) +
   geom_point(alpha = 0.6) +
   geom_smooth(method = "lm", se = FALSE) +
   theme_minimal()
@@ -2075,21 +2075,21 @@ library(lme4)
 library(lmerTest)
 library(nlme)
 
-GGally::ggpairs(ds[, c("total_biomass", "dry_root_wt", "sprout_or_transplant_to_harvest", "num_of_plants", "rep")])
+GGally::ggpairs(ds[, c("total_biomass", "dry_root_wt", "age", "num_of_plants", "rep")])
 #col test
 # Fit a simple model with all predictors for collinearity check
 col_test <- lm(dry_root_wt ~ treatment + genotype
-             + sprout_or_transplant_to_harvest, data = ds)
+             + age, data = ds)
 
 performance::check_collinearity(col_test)
 
 
-cor(ds[, c("total_biomass", "dry_root_wt", "sprout_or_transplant_to_harvest", "num_of_plants", "rep")], use = "pairwise.complete.obs")    
-pairs(ds[, c("total_biomass", "dry_root_wt", "sprout_or_transplant_to_harvest", "num_of_plants", "rep")], upper.panel = NULL)   
+cor(ds[, c("total_biomass", "dry_root_wt", "age", "num_of_plants", "rep")], use = "pairwise.complete.obs")    
+pairs(ds[, c("total_biomass", "dry_root_wt", "age", "num_of_plants", "rep")], upper.panel = NULL)   
 library(car)
 vif(m2)
 
-lm1 <- lm(dry_root_wt ~ treatment + genotype + sprout_or_transplant_to_harvest, data = ds)
+lm1 <- lm(dry_root_wt ~ treatment + genotype + age, data = ds)
 summary(lm1)
 
 
@@ -2101,13 +2101,13 @@ library(ggplot2)
 library(ggeffects)
 
 # 1️⃣ Fit GLS model (if not already done)
-gls1 <- gls(dry_root_wt ~ treatment + genotype + sprout_or_transplant_to_harvest,
+gls1 <- gls(dry_root_wt ~ treatment + genotype + age,
             data = ds,
             method = "REML",
             na.action = na.exclude)
 
 # 2️⃣ Fit LME model with replicate as random effect
-lme1 <- lme(dry_root_wt ~ treatment + genotype + sprout_or_transplant_to_harvest,
+lme1 <- lme(dry_root_wt ~ treatment + genotype + age,
             random = ~ 1 | rep,
             data = ds,
             method = "REML",
@@ -2125,7 +2125,7 @@ check_model(lme1)
 drop1(lme1_ml, test = "Chisq")
 
 # 6️⃣ Final model (simplified to genotype only, using REML)
-lme_final <- update(lme1, fixed = dry_root_wt ~ treatment + genotype + sprout_or_transplant_to_harvest,
+lme_final <- update(lme1, fixed = dry_root_wt ~ treatment + genotype + age,
                     random = ~ 1 | rep,
                     method = "REML")
 summary(lme_final)
@@ -2136,14 +2136,14 @@ tab_model(lme_final, show.se = TRUE)
 
 
 # Get predicted values from the model
-lmer_final <- lmer(dry_root_wt ~ genotype + sprout_or_transplant_to_harvest + (1 | rep),
+lmer_final <- lmer(dry_root_wt ~ genotype + age + (1 | rep),
                    data = ds,
                    REML = TRUE)
 
 
 lmer_final <- na.action(lmer_final, na.exclude)
 
-pred <- ggpredict(lmer_final, terms = "sprout_or_transplant_to_harvest")
+pred <- ggpredict(lmer_final, terms = "age")
 plot(pred, show_data = TRUE) +
   labs(x = "Sprout or Transplant to Harvest (days)",
        y = "Dry Root Weight (g)",
@@ -2217,7 +2217,7 @@ for (fold in 1:k) {
   test_data  <- ds[ds$rep %in% test_groups, ]
   
   # Fit the mixed model on the training data
-  model <- lmer(dry_root_wt ~ genotype + sprout_or_transplant_to_harvest + (1|rep),
+  model <- lmer(dry_root_wt ~ genotype + age + (1|rep),
                 data = train_data)
   
   # Predict on the test data

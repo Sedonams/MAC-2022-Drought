@@ -148,15 +148,6 @@ ggplot() +
     color = "Treatment",
     fill = "Treatment")
 
-
-geno_summary <- ds %>%
-  group_by(genotype, treatment) %>%
-  summarise(
-    mean_shoot = mean(tot_shoot_wtg, na.rm = TRUE),
-    mean_vesicle = mean(vesicle_rlc, na.rm = TRUE),
-    .groups = "drop"
-  )
-
 m <- lmer(
   tot_shoot_wtg ~ vesicle_rlc * treatment + genotype + (1|rep),
   data = ds)
@@ -165,7 +156,7 @@ pred <- ggpredict(m, terms = c("vesicle_rlc", "treatment"))
 
 ggplot() +
   geom_point(data = geno_summary,
-             aes(mean_vesicle, mean_shoot, color = treatment),
+             aes(mean_vesicle_rlc, mean_tot_shoot_wtg, color = treatment),
              alpha = 0.5) +
 
   geom_ribbon(data = pred,
@@ -183,16 +174,6 @@ ggplot() +
     color = "Treatment",
     fill = "Treatment")
 
-
-
-geno_summary <- ds %>%
-  group_by(genotype, treatment) %>%
-  summarise(
-    mean_shoot = mean(tot_shoot_wtg, na.rm = TRUE),
-    mean_arb = mean(arb_rlc, na.rm = TRUE),
-    .groups = "drop"
-  )
-
 m <- lmer(
   tot_shoot_wtg ~ arb_rlc * treatment + genotype + (1|rep),
   data = ds)
@@ -201,17 +182,14 @@ pred <- ggpredict(m, terms = c("arb_rlc", "treatment"))
 
 ggplot() +
   geom_point(data = geno_summary,
-             aes(mean_arb, mean_shoot, color = treatment),
+             aes(mean_arb_rlc, mean_tot_shoot_wtg, color = treatment),
              alpha = 0.5) +
-
   geom_ribbon(data = pred,
               aes(x = x, ymin = conf.low, ymax = conf.high, fill = group),
               alpha = 0.25) +
-
   geom_line(data = pred,
             aes(x = x, y = predicted, color = group),
             linewidth = 1.3) +
-
   theme_classic(base_size = 14) +
   labs(
     x = "Mean Arbuscule Root Length Colonized (%)",
@@ -222,14 +200,14 @@ ggplot() +
 
 drought_perf <- geno_summary %>%
   filter(treatment == "Droughted") %>%
-  arrange(desc(mean_shoot))
+  arrange(desc(mean_tot_shoot_wtg))
 
 drought_perf %>%
-  select(genotype, mean_shoot, mean_rlc)
+  select(genotype, mean_tot_shoot_wtg, mean_amf_rlc)
 
 
-lm(mean_shoot ~ mean_rlc, data = filter(geno_summary, treatment == "Droughted"))
-summary(lm(mean_shoot ~ mean_rlc,
+lm(mean_tot_shoot_wtg ~ mean_rlc, data = filter(geno_summary, treatment == "Droughted"))
+summary(lm(mean_tot_shoot_wtg ~ mean_rlc,
            data = filter(geno_summary, treatment == "Droughted")))
 
 model <- lmer(
@@ -243,72 +221,130 @@ ggplot(ds, aes(amf_rlc, tot_shoot_wtg, color = treatment)) +
   geom_smooth(method = "lm", se = FALSE) +
   facet_wrap(~genotype) +
   theme_classic()
+```
 
+```{r,warning=FALSE,message=FALSE}
 geno_wide <- geno_summary %>%
   tidyr::pivot_wider(
     names_from = treatment,
-    values_from = c(mean_shoot, mean_rlc)
+    values_from = c(mean_tot_shoot_wtg, mean_amf_rlc)
   )
 
-lm(drought_advantage ~ mean_rlc, data = geno_wide)
-summary(lm(drought_advantage ~ mean_rlc, data = geno_wide))
-
-ggplot(geno_summary, aes(mean_rlc, mean_shoot, color = treatment)) +
+ggplot(geno_summary, aes(mean_amf_rlc, mean_tot_shoot_wtg, color = treatment)) +
   geom_point(alpha = 0.7) +
   geom_smooth(method = "lm", se = FALSE) +
   facet_wrap(~genotype) +
   theme_classic()
 
 ggplot(geno_summary,
-       aes(treatment, mean_shoot, group = genotype)) +
+       aes(treatment, mean_tot_shoot_wtg, group = genotype)) +
   geom_line(alpha = 0.4) +
   geom_point() +
   theme_classic()
 
+
+# Combine Watered and Droughted if you want side-by-side panels
 geno_slopes <- ds %>%
-  group_by(genotype) %>%
+  group_by(treatment, genotype) %>%
   do({
     model <- lm(tot_shoot_wtg ~ amf_rlc, data = .)
-    data.frame(slope = coef(model)[2])
+    s <- summary(model)$coefficients
+    data.frame(
+      slope = s["amf_rlc", "Estimate"],
+      se = s["amf_rlc", "Std. Error"]
+    )
   }) %>%
-  arrange(desc(slope))
-
-ggplot(geno_slopes, aes(x = reorder(genotype, slope), y = slope)) +
-  geom_col(fill = "steelblue") +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  coord_flip() +
-  theme_classic() +
-  labs(
-    x = "Genotype",
-    y = "Colonization → Growth Slope",
-    title = "Genotype Response to AMF Colonization"
+  mutate(
+    lower = slope - 1.96 * se,
+    upper = slope + 1.96 * se
   )
 
-geno_slopes_drought <- ds %>%
-  filter(treatment == "Droughted") %>%
-  group_by(genotype) %>%
-  do({
-    model <- lm(tot_shoot_wtg ~ amf_rlc, data = .)
-    data.frame(slope = coef(model)[2])
-  }) %>%
-  arrange(desc(slope))
+# Reorder genotypes within each treatment
+geno_slopes <- geno_slopes %>%
+  group_by(treatment) %>%
+  arrange(slope) %>%
+  mutate(genotype = factor(genotype, levels = genotype)) %>%
+  ungroup()
 
-ggplot(geno_slopes_drought, aes(x = reorder(genotype, slope), y = slope)) +
-  geom_col(fill = "steelblue") +
-  geom_hline(yintercept = 0, linetype = "dashed") +
+# Plot
+ggplot(geno_slopes, aes(x = genotype, y = slope, color = treatment)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
   coord_flip() +
-  theme_classic() +
+  facet_wrap(~treatment, scales = "free_y") +
+  theme_classic(base_size = 14) +
+  theme(
+    legend.position = "none",
+    strip.background = element_rect(fill = "white"),
+    axis.text.y = element_text(face = "bold")
+  ) +
   labs(
     x = "Genotype",
-    y = "Colonization → Growth Slope",
-    title = "Genotype Response to AMF Colonization in Drought Only"
+    y = "Slope of Biomass vs AMF Colonization",
+    title = "Genotype Ranking by AMF Growth Response"
   )
-
-
-
 ```
 
 
+```{r,warning=FALSE,message=FALSE}
+# Add a significance flag
+geno_slopes <- geno_slopes %>%
+  mutate(significant = ifelse(lower > 0 | upper < 0, TRUE, FALSE))
+
+# Plot with larger points for significant slopes
+ggplot(geno_slopes, aes(x = genotype, y = slope, color = treatment)) +
+  geom_point(aes(size = significant)) +  # size mapped to significance
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+  coord_flip() +
+  facet_wrap(~treatment, scales = "free_y") +
+  scale_size_manual(values = c("FALSE" = 2, "TRUE" = 5)) +  # small for non-sig, big for sig
+  theme_classic(base_size = 14) +
+  theme(
+    legend.position = "none",
+    strip.background = element_rect(fill = "white"),
+    axis.text.y = element_text(face = "bold")
+  ) +
+  labs(
+    x = "Genotype",
+    y = "Slope of Biomass vs AMF Colonization",
+    title = "Genotype Ranking by AMF Growth Response"
+  )
+
+library(ggplot2)
+library(dplyr)
+library(RColorBrewer)
+
+# Add significance flag
+geno_slopes <- geno_slopes %>%
+  mutate(significant = ifelse(lower > 0 | upper < 0, TRUE, FALSE))
+
+# Plot
+ggplot(geno_slopes, aes(x = genotype, y = slope, color = treatment)) +
+  geom_errorbar(aes(ymin = lower, ymax = upper),
+                width = 0.2, color = "gray70") +
+  geom_point(aes(color = significant, size = significant)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+  coord_flip() +
+  facet_wrap(~treatment, scales = "free_y") +
+  scale_color_manual(values = c("FALSE" = "gray70")) +  # sig = green, non-sig = grey
+  scale_size_manual(values = c("TRUE" = 4, "FALSE" = 2)) +
+  theme_classic(base_size = 14) +
+  theme(
+    legend.position = "none",
+    strip.background = element_rect(fill = "white"),
+    axis.text.y = element_text(face = "bold"),
+    panel.grid.major.x = element_line(color = "gray90", linetype = "dashed"),
+    panel.grid.minor.x = element_blank()
+  ) +
+  labs(
+    x = "Genotype",
+    y = "Slope of Biomass vs AMF Colonization",
+    title = "Genotype Ranking by AMF Growth Response"
+  )
+
+```
 
 Linear model for total biomass by genotype and treatment
 

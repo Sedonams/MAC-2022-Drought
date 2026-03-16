@@ -20,6 +20,13 @@ library(ggrepel)  # For smart label positioning
 library(tibble)
 library(lme4)
 library(nlme)
+library(ggeffects)
+library(performance)
+library(sjPlot)
+library(car)
+library(ggpubr)
+library(GGally)
+library(DHARMa)
 ```
 
 Set up working directory
@@ -28,7 +35,7 @@ getwd()
 #Work path
 setwd("H:/MAC-2022-Drought")
 #laptop path
-setwd("C:/Users/sedon/MAC-2022-Drought-1")
+#setwd("C:/Users/sedon/MAC-2022-Drought-1")
 ```
 
 loading dataset
@@ -52,13 +59,38 @@ boxplot(amf_rlc ~ genotype:treatment, data = ds)
 geno_summary <- ds %>%
   group_by(genotype, treatment) %>%
   summarise(
-    mean_shoot = mean(tot_shoot_wtg, na.rm = TRUE),
-    mean_rlc = mean(amf_rlc, na.rm = TRUE),
+    across(
+      c(tot_shoot_wtg, amf_rlc, arb_rlc, vesicle_rlc, olpidium_rlc,
+        am_hyphae_rlc, dse_rlc, lse_rlc, coil_rlc, fine_endo_rlc, non_am_rlc),
+      ~ mean(.x, na.rm = TRUE),
+      .names = "mean_{.col}"
+    ),
     .groups = "drop"
   )
 
+View(geno_summary)
 
-ggplot(geno_summary, aes(mean_rlc, mean_shoot, color = treatment)) +
+geno_long <- geno_summary %>%
+  pivot_longer(
+    cols = starts_with("mean_") & !mean_tot_shoot_wtg,
+    names_to = "fungal_var",
+    values_to = "colonization"
+  )
+
+ggplot(geno_long,
+       aes(colonization, mean_tot_shoot_wtg, color = treatment)) +
+  geom_point(size = 3) +
+  geom_smooth(method = "lm", se = FALSE, linewidth = 1.1) +
+  facet_wrap(~ fungal_var, scales = "free_x") +
+  theme_classic(base_size = 14) +
+  labs(
+    x = "Mean Colonization (%)",
+    y = "Mean Shoot Biomass (g)",
+    color = "Treatment"
+  )
+
+
+ggplot(geno_summary, aes(mean_amf_rlc, mean_tot_shoot_wtg, color = treatment)) +
   geom_point(size = 4) +
   geom_smooth(method = "lm", se = FALSE, linewidth = 1.2) +
   theme_classic(base_size = 14) +
@@ -68,6 +100,28 @@ ggplot(geno_summary, aes(mean_rlc, mean_shoot, color = treatment)) +
     color = "Treatment"
   )
 
+ggplot(geno_summary, aes(mean_arb_rlc, mean_tot_shoot_wtg, color = treatment)) +
+  geom_point(size = 4) +
+  geom_smooth(method = "lm", se = FALSE, linewidth = 1.2) +
+  theme_classic(base_size = 14) +
+  labs(
+    x = "Mean Arbuscule Colonization (%)",
+    y = "Mean Shoot Biomass (g)",
+    color = "Treatment"
+  )
+
+ggplot(geno_summary, aes(mean_vesicle_rlc, mean_tot_shoot_wtg, color = treatment)) +
+  geom_point(size = 4) +
+  geom_smooth(method = "lm", se = FALSE, linewidth = 1.2) +
+  theme_classic(base_size = 14) +
+  labs(
+    x = "Mean Vesicle Colonization (%)",
+    y = "Mean Shoot Biomass (g)",
+    color = "Treatment"
+  )
+```
+
+```{r,warning=FALSE,message=FALSE}
 m <- lmer(
   tot_shoot_wtg ~ amf_rlc * treatment + genotype + (1|rep),
   data = ds)
@@ -75,8 +129,8 @@ m <- lmer(
 pred <- ggpredict(m, terms = c("amf_rlc", "treatment"))
 
 ggplot() +
-  geom_point(data = geno_summary,
-             aes(mean_rlc, mean_shoot, color = treatment),
+  geom_point(data = ds,
+             aes(amf_rlc, tot_shoot_wtg, color = treatment),
              alpha = 0.5) +
 
   geom_ribbon(data = pred,
@@ -93,8 +147,6 @@ ggplot() +
     y = "Total Shoot Biomass (g)",
     color = "Treatment",
     fill = "Treatment")
-
-
 
 
 geno_summary <- ds %>%

@@ -265,79 +265,36 @@ geno_slopes <- geno_slopes %>%
   arrange(slope) %>%
   mutate(genotype = factor(genotype, levels = genotype)) %>%
   ungroup()
-
-# Plot
-ggplot(geno_slopes, aes(x = genotype, y = slope, color = treatment)) +
-  geom_point(size = 3) +
-  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
-  coord_flip() +
-  facet_wrap(~treatment, scales = "free_y") +
-  theme_classic(base_size = 14) +
-  theme(
-    legend.position = "none",
-    strip.background = element_rect(fill = "white"),
-    axis.text.y = element_text(face = "bold")
-  ) +
-  labs(
-    x = "Genotype",
-    y = "Slope of Biomass vs AMF Colonization",
-    title = "Genotype Ranking by AMF Growth Response"
-  )
-```
-
-
-```{r,warning=FALSE,message=FALSE}
-# Add a significance flag
-geno_slopes <- geno_slopes %>%
-  mutate(significant = ifelse(lower > 0 | upper < 0, TRUE, FALSE))
-
-# Plot with larger points for significant slopes
-ggplot(geno_slopes, aes(x = genotype, y = slope, color = treatment)) +
-  geom_point(aes(size = significant)) +  # size mapped to significance
-  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
-  coord_flip() +
-  facet_wrap(~treatment, scales = "free_y") +
-  scale_size_manual(values = c("FALSE" = 2, "TRUE" = 5)) +  # small for non-sig, big for sig
-  theme_classic(base_size = 14) +
-  theme(
-    legend.position = "none",
-    strip.background = element_rect(fill = "white"),
-    axis.text.y = element_text(face = "bold")
-  ) +
-  labs(
-    x = "Genotype",
-    y = "Slope of Biomass vs AMF Colonization",
-    title = "Genotype Ranking by AMF Growth Response"
-  )
-
-library(ggplot2)
-library(dplyr)
-library(RColorBrewer)
+  
 
 # Add significance flag
 geno_slopes <- geno_slopes %>%
   mutate(significant = ifelse(lower > 0 | upper < 0, TRUE, FALSE))
 
 # Plot
-ggplot(geno_slopes, aes(x = genotype, y = slope, color = treatment)) +
+ggplot(geno_slopes, aes(x = genotype, y = slope)) +
   geom_errorbar(aes(ymin = lower, ymax = upper),
                 width = 0.2, color = "gray70") +
-  geom_point(aes(color = significant, size = significant)) +
+  geom_point(aes(color = ifelse(significant, treatment, "non-significant"),
+                 size = significant)) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
   coord_flip() +
   facet_wrap(~treatment, scales = "free_y") +
-  scale_color_manual(values = c("FALSE" = "gray70")) +  # sig = green, non-sig = grey
-  scale_size_manual(values = c("TRUE" = 4, "FALSE" = 2)) +
+  scale_color_manual(values = c(
+    "non-significant" = "gray70",
+    "Watered" = "#1b9e77",  # replace with your treatment colors
+    "Droughted" = "#d95f02"
+  )) +
+  scale_size_manual(values = c("TRUE" = 5, "FALSE" = 3)) +
   theme_classic(base_size = 14) +
-  theme(
-    legend.position = "none",
-    strip.background = element_rect(fill = "white"),
-    axis.text.y = element_text(face = "bold"),
-    panel.grid.major.x = element_line(color = "gray90", linetype = "dashed"),
-    panel.grid.minor.x = element_blank()
-  ) +
+theme(
+  legend.position = "none",
+  strip.background = element_blank(),       # <-- removes boxes
+  strip.text = element_text(face = "bold"), # keeps bold header text
+  axis.text.y = element_text(face = "bold"),
+  panel.grid.major.x = element_line(color = "gray90", linetype = "dashed"),
+  panel.grid.minor.x = element_blank()
+) +
   labs(
     x = "Genotype",
     y = "Slope of Biomass vs AMF Colonization",

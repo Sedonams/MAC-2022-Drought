@@ -90,7 +90,7 @@ n
 str(n)
 plot(n$residuals ~ n$fitted.values)
 
-
+hist(ds$amf_rlc)
 
 library(car)
 ds$treatment <- as.factor(ds$treatment)

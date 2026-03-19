@@ -1,5 +1,3 @@
-
-
 ```{r,warning=FALSE,message=FALSE}
 #-----Loading Libraries and Data Sets----
 # Load necessary libraries
@@ -53,6 +51,13 @@ dotchart(ds$tot_shoot_wtg, group = factor(ds$treatment))
 dotchart(ds$amf_rlc,  group = factor(ds$treatment))
 boxplot(tot_shoot_wtg ~ genotype:treatment, data = ds)
 boxplot(amf_rlc ~ genotype:treatment, data = ds)
+ggplot(ds, aes(x = amf_rlc) ) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "black") +
+  theme_bw() +
+  labs(x = "AMF Root Length Colonized (%)", y = "Frequency",
+       title = "Distribution of AMF Colonization") +
+  theme(plot.title = element_text(face = "bold", size = 14))
+
 ```
 
 ```{r,warning=FALSE,message=FALSE}
@@ -140,14 +145,14 @@ o <- lmer(tot_shoot_wtg ~ amf_rlc * treatment * genotype + (1|rep),
 
 # AIC doesn't directly compare lmer and gls objects well — use same framework
 # Option 1: keep all as lmer
-AIC(m, o)  # compare just the lmer models
+AIC(m,n,o)  # compare just the lmer models
 
 # Option 2: refit m with gls for a fair comparison
 m_gls <- gls(tot_shoot_wtg ~ amf_rlc * treatment + genotype,
   correlation = corCompSymm(form = ~ 1 | rep),
   data = ds)
 
-View(AIC(m_gls, n, m, o))  # now comparable
+View(AIC( n, m, o))  # now comparable
 
 
 DHARMa::simulateResiduals(fittedModel = m, plot = TRUE)
@@ -775,7 +780,9 @@ ds <- ds %>%
 
 #------Drought Response Heatmap for nutrients biomass and florets----
 
-vars <- c("tot_shoot_wtg", "florets", "d13c", "c", "d15n", "n", "p", "cn_ratio", "np_ratio", "rlc_amf")
+vars <- c("tot_shoot_wtg", "florets", "d13c", "c", "d15n", "n", "p", "cn_ratio", "np_ratio", "amf_rlc", "arb_rlc", "vesicle_rlc", "am_hyphae_rlc", "dse_rlc", "lse_rlc", "coil_rlc", "fine_endo_rlc")
+
+glimpse(ds)
 
 #do heatmap with variables on both x and y heatmap, instead of genotype on the x. then also just droughted and watered and both. make x parameters with response ratio. Could pair each rep to its nearest pair, this would be resp ratio vs 0. rather than the mean. biomass to ratio not slope, correlate it with the drought RLC. water vs drought col. correlate the ratio with control col and drought. control is "max". if col is depressed in drought. p value heatmap with pick out the not GxT but droguht responsive, pull them out. introspect it to see all the genotypes on the graph and pull out some on the. GxT resp ratio against colonization in drought and watered. Does commmunity matter in this system. 
 
@@ -842,7 +849,7 @@ pretty_names <- c(
   "tot_shoot_wtg" = "Shoot Weight",
   "florets" = "Florets",
   "arb" = "Arbuscules",
-  "vesicle_or_spore" = "Vesicles/Spores",
+  "vesicle_rlc" = "Vesicles",
   "amf_in_dry_soil" = "AMF in Dry Soil",
   "amf_rlc" = "Root Length Colonized",
   "dse_in_dry_soil" = "DSE in Dry Soil",
@@ -920,7 +927,7 @@ ggsave("drought_response_heatmap_simple.png", plot = p, width = 14, height = 8, 
 
 vars <- c("amf_rlc", "am_hyphae_dse_and_am_rlc","arb_ves_and_arb_rlc", "dse_dse_and_am_rlc",
           "vesicle_or_spore_ves_and_arb_rlc", "lse_rlc", "coil_rlc",
-          "olpidium_rlc",	"mold_rlc", "plasmodiophorids_rlc",	"dot_line_rlc",	"non_am_rlc",	
+          "olpidium_rlc", "mold_rlc", "plasmodiophorids_rlc", "dot_line_rlc", "non_am_rlc", 
           "fine_endo_rlc","amf_in_dry_soil","dse_in_dry_soil","tot_shoot_wtg", "florets", "d13c",
           "c", "d15n", "n", "p", "cn_ratio", "np_ratio")
 
@@ -1787,44 +1794,6 @@ ggsave("pca_biplot.png", plot = p1_selective, width = 12, height = 8, dpi = 300,
 ggsave("pca_scree.png", plot = p2, width = 8, height = 6, dpi = 300, bg = "white")
 
 #---Boxplots of colonization----
-amf_filtered <- ds %>%
-  filter(!is.na(amf_rlc) & amf_rlc != 0) %>%
-  group_by(genotype) %>%
-  filter(sum(!is.na(amf_rlc)) >= 5) %>%  # Ensure at least 5 non-NA values for each Genotype
-  ungroup()
-
-#Calculate the IQR and remove outliers
-Q1 <- quantile(amf_filtered$amf_rlc, 0.25)
-Q3 <- quantile(amf_filtered$amf_rlc, 0.75)
-IQR <- Q3 - Q1
-
-amf_filtered_no_outliers <- amf_filtered %>%
-  filter(amf_rlc >= (Q1 - 1.5 * IQR) & amf_rlc <= (Q3 + 1.5 * IQR))
-
-# Plot the filtered data
-p <- ggplot(amf_filtered_no_outliers, aes(x = treatment, y = amf_rlc)) +
-  geom_boxplot(aes(fill = treatment), 
-               alpha = 0.1, outlier.shape = NA) +
-  geom_jitter(aes(color = treatment), 
-              width = 0.2, size = 1.8, alpha = 1) +
-  facet_grid(~genotype, scales = "free_x", space = "free_x") +  # keep treatments aligned
-  stat_n_text() +
-  labs(y = "AMF Root Length Colonized (%)", x = "") +
-  theme_minimal(base_size = 14) +
-  theme(
-    panel.grid.major.x = element_blank(),
-    panel.grid.minor.x = element_blank(),
-    axis.title.x = element_blank(),
-    axis.text.x  = element_blank(),
-    legend.position = "top",
-    legend.title = element_blank(),
-    panel.spacing = unit(1, "lines"),   # spacing between panels
-    panel.border = element_rect(color = "black", fill = NA)  # border around each facet
-  )
-p
-
-
-#------Correlating Colonization to Drought Tolerance per Genotype----
 
 # Define colonization variables and drought response variables
 colonization_vars <- c("amf_rlc", "am_hyphae_rlc", "arb_rlc", 

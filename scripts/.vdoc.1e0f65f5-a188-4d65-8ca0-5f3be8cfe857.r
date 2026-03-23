@@ -1,4 +1,4 @@
-```{r,warning=FALSE,message=FALSE}
+#
 #-----Loading Libraries and Data Sets----
 # Load necessary libraries
 library(readxl) 
@@ -25,28 +25,28 @@ library(car)
 library(ggpubr)
 library(GGally)
 library(DHARMa)
-```
-
-Set up working directory
-```{r,warning=FALSE,message=FALSE}
+#
+#
+#
+#
 getwd()
 #Work path
 setwd("H:/MAC-2022-Drought")
 #laptop path
 #setwd("C:/Users/sedon/MAC-2022-Drought-1")
-```
-
-loading dataset
-```{r,warning=FALSE,message=FALSE}
+#
+#
+#
+#
 ds <- read.csv("data/MAC22_cleaned.csv") #Using the cleaned up dataset. Missing some things like dmgr. 
 theme_set(theme_bw())
 
 View(ds)
 glimpse(ds)
-```
-
-checking distributions of key response variables and colonization metrics to inform model choice and transformations
-```{r,warning=FALSE,message=FALSE}
+#
+#
+#
+#
 dotchart(ds$tot_shoot_wtg, group = factor(ds$treatment))
 dotchart(ds$amf_rlc,  group = factor(ds$treatment))
 boxplot(tot_shoot_wtg ~ genotype:treatment, data = ds)
@@ -58,11 +58,11 @@ ggplot(ds, aes(x = amf_rlc) ) +
        title = "Distribution of AMF Colonization") +
   theme(plot.title = element_text(face = "bold", size = 14))
 
-```
-
-
-Creating summary table of mean biomass and colonization by genotype and treatment to visualize relationships
-```{r,warning=FALSE,message=FALSE}
+#
+#
+#
+#
+#
 geno_summary <- ds %>%
   group_by(genotype, treatment) %>%
   summarise(
@@ -76,10 +76,10 @@ geno_summary <- ds %>%
   )
 
 View(geno_summary)
-```
-
-Creating scatterplots of mean shoot biomass vs mean colonization for each fungal variable, faceted by treatment
-```{r,warning=FALSE,message=FALSE}
+#
+#
+#
+#
 geno_long <- geno_summary %>%
   pivot_longer(
     cols = starts_with("mean_") & !mean_tot_shoot_wtg,
@@ -129,11 +129,11 @@ ggplot(geno_summary, aes(mean_vesicle_rlc, mean_tot_shoot_wtg, color = treatment
     y = "Mean Shoot Biomass (g)",
     color = "Treatment"
   )
-```
-
-
-creating models to test for GxT interactions and compare model fit with and without interactions, and with different random effect structures
-```{r,warning=FALSE,message=FALSE}
+#
+#
+#
+#
+#
 # Model m: interaction + genotype additive, random intercept for rep
 m <- lmer(tot_shoot_wtg ~ amf_rlc * treatment + genotype + (1|rep),
   data = ds)
@@ -257,26 +257,14 @@ ggplot() +
     y = "Mean Total Shoot Biomass (g)",
     color = "Treatment",
     fill = "Treatment")
-```
 
 
-```{r}
 drought_perf <- geno_summary %>%
   filter(treatment == "Droughted") %>%
   arrange(desc(mean_tot_shoot_wtg))
 
-geno_wide <- geno_summary %>%
-  tidyr::pivot_wider(
-    names_from = treatment,
-    values_from = c(mean_tot_shoot_wtg, mean_amf_rlc)
-  )
-
 drought_perf %>%
-  select(genotype, mean_tot_shoot_wtg, mean_amf_rlc) %>%
-  tidyr::pivot_wider(
-    names_from = treatment,
-    values_from = c(mean_tot_shoot_wtg, mean_amf_rlc)
-  )
+  select(genotype, mean_tot_shoot_wtg, mean_amf_rlc)
 
 
 lm(mean_tot_shoot_wtg ~ mean_rlc, data = filter(geno_summary, treatment == "Droughted"))
@@ -294,10 +282,15 @@ ggplot(ds, aes(amf_rlc, tot_shoot_wtg, color = treatment)) +
   geom_smooth(method = "lm", se = FALSE) +
   facet_wrap(~genotype) +
   theme_classic()
-```
+#
+#
+#
+geno_wide <- geno_summary %>%
+  tidyr::pivot_wider(
+    names_from = treatment,
+    values_from = c(mean_tot_shoot_wtg, mean_amf_rlc)
+  )
 
-creating genotype-level slopes of biomass vs colonization for each treatment to visualize and rank genotypes by their AMF growth response
-```{r,warning=FALSE,message=FALSE}
 ggplot(geno_summary, aes(mean_amf_rlc, mean_tot_shoot_wtg, color = treatment)) +
   geom_point(alpha = 0.7) +
   geom_smooth(method = "lm", se = FALSE) +
@@ -369,11 +362,11 @@ theme(
     title = "Genotype Ranking by AMF Growth Response"
   )
 
-```
-
-Linear model for total biomass by genotype and treatment
-
-```{r,warning=FALSE,message=FALSE}
+#
+#
+#
+#
+#
 m <- lmer(tot_shoot_wtg ~ genotype * treatment + (1|rep), data = ds)
 #Type ‘m’ to look at the model coefficients.
 m
@@ -751,11 +744,52 @@ print(importance_summary)
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#------Making RLC's for the colonization data----
+
+ds <- ds %>%
+  mutate(arb_ves_and_arb = rowSums(select(., arb, ves_and_arb), na.rm = TRUE)) %>%
+  mutate(vesicle_or_spore_ves_and_arb = rowSums(select(., vesicle_or_spore, ves_and_arb), na.rm = TRUE)) %>%
+  mutate(am_hyphae_dse_and_am = rowSums(select(., am_hyphae, dse_and_am), na.rm = TRUE)) %>%
+  mutate(dse_dse_and_am = rowSums(select(., dse, dse_and_am), na.rm = TRUE))
+
+# Count non-zero values in each column to confirm successful combination
+sum(ds$arb_ves_and_arb != 0, na.rm = TRUE)
+sum(ds$arb != 0, na.rm = TRUE)
+
+columns_to_convert <- c("am_hyphae_dse_and_am","arb_ves_and_arb", "dse_dse_and_am", "vesicle_or_spore_ves_and_arb", "lse", "coil","fine_endo")
+
+ds <- ds %>%
+  mutate(across(all_of(columns_to_convert), 
+                ~ if_else(!is.na(.x) & !is.na(tot), 
+                          (.x / tot) * 100, 
+                          NA_real_),
+                .names = "{.col}_rlc"))
+
+
 #------Drought Response Heatmap for nutrients biomass and florets----
 
 vars <- c("tot_shoot_wtg", "florets", "d13c", "c", "d15n", "n", "p", "cn_ratio", "np_ratio", "amf_rlc", "arb_rlc", "vesicle_rlc", "am_hyphae_rlc", "dse_rlc", "lse_rlc", "coil_rlc", "fine_endo_rlc")
 
 glimpse(ds)
+
+#do heatmap with variables on both x and y heatmap, instead of genotype on the x. then also just droughted and watered and both. make x parameters with response ratio. Could pair each rep to its nearest pair, this would be resp ratio vs 0. rather than the mean. biomass to ratio not slope, correlate it with the drought RLC. water vs drought col. correlate the ratio with control col and drought. control is "max". if col is depressed in drought. p value heatmap with pick out the not GxT but droguht responsive, pull them out. introspect it to see all the genotypes on the graph and pull out some on the. GxT resp ratio against colonization in drought and watered. Does commmunity matter in this system. 
 
 # Step 1: Scale data
 ds_scaled <- ds %>%
@@ -892,78 +926,8 @@ p <- ggplot(heatmap_df, aes(x = variable_pretty, y = genotype, fill = effect)) +
 p
 
 # Optional: Save high-quality version
-#ggsave("drought_response_heatmap_simple.png", plot = p, width = 14, height = 8, dpi = 300, bg = "white")
+ggsave("drought_response_heatmap_simple.png", plot = p, width = 14, height = 8, dpi = 300, bg = "white")
 
-
-
-#------Variable-vs-Variable Heatmaps (Drought/Watered / Response Ratio)----
-heatmap_vars <- c("tot_shoot_wtg", "florets", "d13c", "c", "d15n", "n", "p", "cn_ratio", "np_ratio", "amf_rlc", "arb_rlc", "vesicle_rlc", "am_hyphae_rlc", "dse_rlc", "lse_rlc", "coil_rlc", "fine_endo_rlc", "non_am_rlc")
-
-corr_for_treatment <- function(data_subset, label) {
-  corr_mat <- data_subset %>%
-    select(all_of(heatmap_vars)) %>%
-    cor(use = "pairwise.complete.obs")
-  corr_long <- as.data.frame(as.table(corr_mat))
-  names(corr_long) <- c("var_x", "var_y", "corr")
-  corr_long$var_x <- factor(corr_long$var_x, levels = heatmap_vars)
-  corr_long$var_y <- factor(corr_long$var_y, levels = heatmap_vars)
-
-  ggplot(corr_long, aes(x = var_x, y = var_y, fill = corr)) +
-    geom_tile(color = "white") +
-    scale_fill_gradient2(low = "#B2182B", mid = "white", high = "#2166AC", midpoint = 0, limits = c(-1, 1), name = "Correlation") +
-    labs(title = paste0("Variable × Variable Correlation: ", label), x = "Variable", y = "Variable") +
-    theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1), axis.text.y = element_text(size = 8))
-}
-
-p_drought_vars <- corr_for_treatment(filter(ds, treatment == "Droughted"), "Droughted")
-p_watered_vars <- corr_for_treatment(filter(ds, treatment == "Watered"), "Watered")
-p_all_vars <- corr_for_treatment(ds, "All Treatments")
-
-# Response ratio: drought / watered by genotype
-mean_by_treatment <- ds %>%
-  group_by(genotype, treatment) %>%
-  summarise(across(all_of(heatmap_vars), mean, na.rm = TRUE), .groups = "drop")
-
-drought_mean <- mean_by_treatment %>% filter(treatment == "Droughted") %>% select(-treatment)
-watered_mean <- mean_by_treatment %>% filter(treatment == "Watered") %>% select(-treatment)
-
-ratio_by_genotype <- inner_join(drought_mean, watered_mean, by = "genotype", suffix = c("_D", "_W"))
-for (v in heatmap_vars) {
-  ratio_by_genotype[[paste0("ratio_", v)]] <- ratio_by_genotype[[paste0(v, "_D")]] / ratio_by_genotype[[paste0(v, "_W")]]
-}
-ratio_vars <- paste0("ratio_", heatmap_vars)
-
-corr_ratio_mat <- ratio_by_genotype %>% select(all_of(ratio_vars)) %>% cor(use = "pairwise.complete.obs")
-corr_ratio_long <- as.data.frame(as.table(corr_ratio_mat))
-names(corr_ratio_long) <- c("var_x", "var_y", "corr")
-corr_ratio_long$var_x <- factor(gsub("^ratio_", "", corr_ratio_long$var_x), levels = heatmap_vars)
-corr_ratio_long$var_y <- factor(gsub("^ratio_", "", corr_ratio_long$var_y), levels = heatmap_vars)
-
-p_ratio_vars <- ggplot(corr_ratio_long, aes(x = var_x, y = var_y, fill = corr)) +
-  geom_tile(color = "white") +
-  scale_fill_gradient2(low = "#2166AC", mid = "white", high = "#B2182B", midpoint = 0, limits = c(-1, 1), name = "Correlation") +
-  labs(title = "Variable × Variable Correlation (Drought/Watered Response Ratio)", x = "Variable", y = "Variable") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1), axis.text.y = element_text(size = 8))
-
-print(p_drought_vars)
-print(p_watered_vars)
-print(p_all_vars)
-print(p_ratio_vars)
-
-glimpse(corr_mat)
-
-p_drought_vars
-p_watered_vars
-p_all_vars
-p_ratio_vars
-
-# Save them
-ggsave("vars_corr_drought.png", plot = p_drought_vars, width = 10, height = 10, dpi = 300)
-ggsave("vars_corr_watered.png", plot = p_watered_vars, width = 10, height = 10, dpi = 300)
-ggsave("vars_corr_all.png", plot = p_all_vars, width = 10, height = 10, dpi = 300)
-ggsave("vars_corr_ratio.png", plot = p_ratio_vars, width = 10, height = 10, dpi = 300)
 
 
 #------Drought Response Heatmap for Colonization----
@@ -1542,7 +1506,7 @@ all_vars <- c(
   "olpidium_rlc", "mold_rlc", "plasmodiophorids_rlc", "dot_line_rlc", "non_am_rlc",
   "fine_endo_rlc", "amf_in_dry_soil", "dse_in_dry_soil", "tot_shoot_wtg", "florets", "d13c",
   "c", "d15n", "n", "p")
-View(ds)
+
 # Prepare data for PCA
 pca_data <- ds %>%
   select(genotype, treatment, all_of(all_vars)) %>%
@@ -1708,18 +1672,18 @@ loadings_with_strength <- loadings_df %>%
 
 
 
-#genotypes_to_plot <- c("156203", "157033", "181080", "181083", "641815", "E29W1")
+genotypes_to_plot <- c("156203", "157033", "181080", "181083", "641815", "E29W1")
 
-#pca_df_filtered <- pca_df %>%
-  #filter(genotype %in% genotypes_to_plot)
+pca_df_filtered <- pca_df %>%
+  filter(genotype %in% genotypes_to_plot)
 
 # Compute ellipse label positions (center of each treatment group)
-ellipse_labels <- pca_df %>%
+ellipse_labels <- pca_df_filtered %>%
   group_by(treatment) %>%
   summarise(PC1 = mean(PC1), PC2 = mean(PC2), .groups = "drop")
 
 
-p1_selective <- ggplot(pca_df, aes(x = PC1, y = PC2)) +
+p1_selective <- ggplot(pca_df_filtered, aes(x = PC1, y = PC2)) +
   stat_ellipse(aes(color = treatment), 
                alpha = 0.3, type = "norm", level = 0.68, linewidth = 1) +
   geom_point(aes(color = genotype, shape = treatment), size = 3, alpha = 0.8)+
@@ -2529,4 +2493,6 @@ cv_summary <- data.frame(
   SD_RMSE   = sd(cv_results$RMSE)
 )
 
-cv_results
+#
+#
+#

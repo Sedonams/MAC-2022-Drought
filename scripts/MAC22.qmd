@@ -4,7 +4,7 @@
 library(readxl) 
 library(janitor)  # For cleaning column names
 library(dplyr)    # For using the pipe operator (%>%)
-library(corrr)    # For nicer correlation matrices
+library(corrplot)    # For nicer correlation matrices
 library(tidyr)
 library(ggplot2)
 library(EnvStats)
@@ -38,11 +38,11 @@ setwd("H:/MAC-2022-Drought")
 
 loading dataset
 ```{r,warning=FALSE,message=FALSE}
-ds <- read.csv("data/MAC22_cleaned.csv") #Using the cleaned up dataset. Missing some things like dmgr. 
+ds <- read.csv("data/MAC22_cleaned.csv") #Using the cleaned up dataset. 
 theme_set(theme_bw())
 
-View(ds)
-glimpse(ds)
+#View(ds)
+#glimpse(ds)
 ```
 
 checking distributions of key response variables and colonization metrics to inform model choice and transformations
@@ -752,10 +752,9 @@ print(importance_summary)
 
 
 #------Drought Response Heatmap for nutrients biomass and florets----
+vars <- c("tot_shoot_wtg", "florets", "d13c", "c", "d15n", "n", "p", "cn_ratio", "np_ratio", "amf_rlc", "arb_rlc", "vesicle_rlc", "am_hyphae_rlc", "dse_rlc", "lse_rlc")
 
-vars <- c("tot_shoot_wtg", "florets", "d13c", "c", "d15n", "n", "p", "cn_ratio", "np_ratio", "amf_rlc", "arb_rlc", "vesicle_rlc", "am_hyphae_rlc", "dse_rlc", "lse_rlc", "coil_rlc", "fine_endo_rlc")
-
-glimpse(ds)
+#glimpse(ds)
 
 # Step 1: Scale data
 ds_scaled <- ds %>%
@@ -812,17 +811,19 @@ heatmap_df <- heatmap_df %>%
 # Step 6: Merge stats into heatmap data
 heatmap_df <- left_join(heatmap_df, stats_df, by = c("genotype", "variable"))
 
-# Step 7: Enhanced Plot
-library(scales)   # For better formatting
-
 # Create prettier variable names for display
 pretty_names <- c(
   "tot_shoot_wtg" = "Shoot Weight",
-  "florets" = "Florets",
-  "arb" = "Arbuscules",
+  "dse_rlc" = "Dark Septate Endophytes",
+  "am_hyphae_rlc" = "AM Hyphae",
+  "arb_rlc" = "Arbuscules",
+  "fine_endo_rlc" = "Fine Endophytes",
+  "coil_rlc" = "Coils",
+  "lse_rlc" = "Light Septate Endophytes",
+  "florets" = "Inflorescence",
   "vesicle_rlc" = "Vesicles",
   "amf_in_dry_soil" = "AMF in Dry Soil",
-  "amf_rlc" = "Root Length Colonized",
+  "amf_rlc" = "AMF Root Colonization Total",
   "dse_in_dry_soil" = "DSE in Dry Soil",
   "d13c" = "δ¹³C",
   "c" = "Carbon Content",
@@ -839,7 +840,7 @@ heatmap_df <- heatmap_df %>%
                                   levels = pretty_names[var_order]))
 
 glimpse(heatmap_df)
-View(heatmap_df)
+#View(heatmap_df)
 # Create the enhanced plot
 p <- ggplot(heatmap_df, aes(x = variable_pretty, y = genotype, fill = effect)) +
   geom_tile(color = "white", linewidth = 0.5) +
@@ -899,26 +900,89 @@ p
 #------Variable-vs-Variable Heatmaps (Drought/Watered / Response Ratio)----
 heatmap_vars <- c("tot_shoot_wtg", "florets", "d13c", "c", "d15n", "n", "p", "cn_ratio", "np_ratio", "amf_rlc", "arb_rlc", "vesicle_rlc", "am_hyphae_rlc", "dse_rlc", "lse_rlc", "coil_rlc", "fine_endo_rlc", "non_am_rlc")
 
-corr_for_treatment <- function(data_subset, label) {
+corr_for_treatment <- function(data_subset, label, reverse_palette = FALSE, upper_triangle = TRUE) {
   corr_mat <- data_subset %>%
     select(all_of(heatmap_vars)) %>%
     cor(use = "pairwise.complete.obs")
-  corr_long <- as.data.frame(as.table(corr_mat))
-  names(corr_long) <- c("var_x", "var_y", "corr")
-  corr_long$var_x <- factor(corr_long$var_x, levels = heatmap_vars)
-  corr_long$var_y <- factor(corr_long$var_y, levels = heatmap_vars)
 
-  ggplot(corr_long, aes(x = var_x, y = var_y, fill = corr)) +
+  p_mat <- matrix(NA, nrow = length(heatmap_vars), ncol = length(heatmap_vars), dimnames = list(heatmap_vars, heatmap_vars))
+  for (i in seq_along(heatmap_vars)) {
+    for (j in seq_along(heatmap_vars)) {
+      x <- data_subset[[heatmap_vars[i]]]
+      y <- data_subset[[heatmap_vars[j]]]
+      ok <- complete.cases(x, y)
+      if (sum(ok) >= 4) {
+        p_mat[i, j] <- tryCatch(cor.test(x[ok], y[ok], method = "pearson")$p.value, error = function(e) NA_real_)
+      }
+    }
+  }
+
+  # Convert correlation matrix to long format
+  corr_long <- as.data.frame(as.table(corr_mat))
+  corr_long$var_x <- as.character(corr_long$Var1)
+  corr_long$var_y <- as.character(corr_long$Var2)
+  corr_long$cor <- as.numeric(corr_long$Freq)
+  corr_long <- corr_long[, c("var_x", "var_y", "cor")]
+  
+  # Convert p-value matrix to long format
+  p_long <- as.data.frame(as.table(p_mat))
+  p_long$var_x <- as.character(p_long$Var1)
+  p_long$var_y <- as.character(p_long$Var2)
+  p_long$p_value <- as.numeric(p_long$Freq)
+  p_long <- p_long[, c("var_x", "var_y", "p_value")]
+  
+  corr_long <- left_join(corr_long, p_long, by = c("var_x", "var_y"))
+
+  corr_long <- corr_long %>%
+    mutate(
+      stars = case_when(
+        !is.na(p_value) & p_value <= 0.001 ~ "***",
+        !is.na(p_value) & p_value <= 0.01 ~ "**",
+        !is.na(p_value) & p_value <= 0.05 ~ "*",
+        TRUE ~ ""
+      ),
+      label_text = paste0(sprintf("%.2f", cor), ifelse(stars != "", paste0("\n", stars), "")),
+      var_x = factor(var_x, levels = heatmap_vars),
+      var_y = factor(var_y, levels = heatmap_vars)
+    )
+
+  if (upper_triangle) {
+    corr_long <- corr_long %>% filter(as.numeric(var_x) <= as.numeric(var_y))
+  }
+
+  palette_scale <- if (reverse_palette) {
+    scale_fill_gradient2(low = "#B2182B", mid = "white", high = "#2166AC", midpoint = 0, limits = c(-1, 1), name = "Correlation")
+  } else {
+    scale_fill_gradient2(low = "#2166AC", mid = "white", high = "#B2182B", midpoint = 0, limits = c(-1, 1), name = "Correlation")
+  }
+
+  diag_labels <- tibble(
+    var = heatmap_vars,
+    var_x = factor(var, levels = heatmap_vars),
+    var_y = factor(var, levels = heatmap_vars)
+  )
+
+  ggplot(corr_long, aes(x = var_x, y = var_y, fill = cor)) +
     geom_tile(color = "white") +
-    scale_fill_gradient2(low = "#B2182B", mid = "white", high = "#2166AC", midpoint = 0, limits = c(-1, 1), name = "Correlation") +
-    labs(title = paste0("Variable × Variable Correlation: ", label), x = "Variable", y = "Variable") +
+    geom_text(aes(label = label_text), size = 2.5, color = "black") +
+    geom_text(data = diag_labels, aes(x = var_x, y = var_y, label = var, fill = NULL),
+              size = 3, fontface = "bold", color = "black", hjust = 1.1, vjust = 0.1) +
+    palette_scale +
+    labs(title = sprintf("Variable × Variable Correlation: %s", label), x = NULL, y = NULL) +
+    coord_fixed(expand = FALSE) +
     theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1), axis.text.y = element_text(size = 8))
+    theme(
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank(),
+      panel.grid = element_blank(),
+      legend.position = "right"
+    )
 }
 
-p_drought_vars <- corr_for_treatment(filter(ds, treatment == "Droughted"), "Droughted")
-p_watered_vars <- corr_for_treatment(filter(ds, treatment == "Watered"), "Watered")
-p_all_vars <- corr_for_treatment(ds, "All Treatments")
+p_drought_vars <- corr_for_treatment(filter(ds, treatment == "Droughted"), "Droughted", reverse_palette = FALSE, upper_triangle = TRUE)
+p_watered_vars <- corr_for_treatment(filter(ds, treatment == "Watered"), "Watered", reverse_palette = TRUE, upper_triangle = TRUE)
+p_all_vars <- corr_for_treatment(ds, "All Treatments", reverse_palette = FALSE, upper_triangle = TRUE)
 
 # Response ratio: drought / watered by genotype
 mean_by_treatment <- ds %>%
@@ -935,24 +999,60 @@ for (v in heatmap_vars) {
 ratio_vars <- paste0("ratio_", heatmap_vars)
 
 corr_ratio_mat <- ratio_by_genotype %>% select(all_of(ratio_vars)) %>% cor(use = "pairwise.complete.obs")
-corr_ratio_long <- as.data.frame(as.table(corr_ratio_mat))
-names(corr_ratio_long) <- c("var_x", "var_y", "corr")
-corr_ratio_long$var_x <- factor(gsub("^ratio_", "", corr_ratio_long$var_x), levels = heatmap_vars)
-corr_ratio_long$var_y <- factor(gsub("^ratio_", "", corr_ratio_long$var_y), levels = heatmap_vars)
 
-p_ratio_vars <- ggplot(corr_ratio_long, aes(x = var_x, y = var_y, fill = corr)) +
+p_ratio_values <- function(mat_data, dat) {
+  p_mat <- matrix(NA, nrow = ncol(mat_data), ncol = ncol(mat_data), dimnames = list(colnames(mat_data), colnames(mat_data)))
+  var_names <- colnames(mat_data)
+  for (i in seq_along(var_names)) {
+    for (j in seq_along(var_names)) {
+      x <- dat[[var_names[i]]]
+      y <- dat[[var_names[j]]]
+      ok <- complete.cases(x, y)
+      if (sum(ok) >= 4) {
+        p_mat[i, j] <- tryCatch(cor.test(x[ok], y[ok], method = "pearson")$p.value, error = function(e) NA_real_)
+      }
+    }
+  }
+  p_mat
+}
+
+p_ratio_mat <- p_ratio_values(ratio_by_genotype %>% select(all_of(ratio_vars)), ratio_by_genotype)
+
+# Convert correlation matrix to long format
+corr_ratio_long <- as.data.frame(as.table(corr_ratio_mat))
+corr_ratio_long$var_x <- as.character(corr_ratio_long$Var1)
+corr_ratio_long$var_y <- as.character(corr_ratio_long$Var2)
+corr_ratio_long$cor <- as.numeric(corr_ratio_long$Freq)
+corr_ratio_long <- corr_ratio_long[, c("var_x", "var_y", "cor")]
+
+# Convert p-value matrix to long format
+p_ratio_long <- as.data.frame(as.table(p_ratio_mat))
+p_ratio_long$var_x <- as.character(p_ratio_long$Var1)
+p_ratio_long$var_y <- as.character(p_ratio_long$Var2)
+p_ratio_long$p_value <- as.numeric(p_ratio_long$Freq)
+p_ratio_long <- p_ratio_long[, c("var_x", "var_y", "p_value")]
+
+corr_ratio_long <- left_join(corr_ratio_long, p_ratio_long, by = c("var_x", "var_y"))
+
+corr_ratio_long <- corr_ratio_long %>%
+  mutate(
+    stars = case_when(
+      !is.na(p_value) & p_value <= 0.001 ~ "***",
+      !is.na(p_value) & p_value <= 0.01 ~ "**",
+      !is.na(p_value) & p_value <= 0.05 ~ "*",
+      TRUE ~ ""
+    ),
+    var_x = factor(gsub("^ratio_", "", var_x), levels = heatmap_vars),
+    var_y = factor(gsub("^ratio_", "", var_y), levels = heatmap_vars)
+  )
+
+p_ratio_vars <- ggplot(corr_ratio_long, aes(x = var_x, y = var_y, fill = cor)) +
   geom_tile(color = "white") +
+  geom_text(aes(label = stars), size = 3, color = "black", vjust = 0.5) +
   scale_fill_gradient2(low = "#2166AC", mid = "white", high = "#B2182B", midpoint = 0, limits = c(-1, 1), name = "Correlation") +
   labs(title = "Variable × Variable Correlation (Drought/Watered Response Ratio)", x = "Variable", y = "Variable") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1), axis.text.y = element_text(size = 8))
-
-print(p_drought_vars)
-print(p_watered_vars)
-print(p_all_vars)
-print(p_ratio_vars)
-
-glimpse(corr_mat)
 
 p_drought_vars
 p_watered_vars
